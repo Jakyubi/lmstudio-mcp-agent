@@ -17,6 +17,11 @@ logging.basicConfig(
 
 server = Server("mcp-server")
 
+TOOLS_MAP = {
+    "get_current_datetime": tools.get_current_datetime,
+    "list_directory": tools.list_directory
+}
+
 @server.list_tools()
 async def list_tools():
     return[
@@ -49,19 +54,14 @@ async def list_tools():
 
 @server.call_tool()
 async def call_tool(name: str, arguments: dict):
-    if name == "get_current_datetime":
-        result = tools.get_current_datetime()
-        return [TextContent(type="text", text=result)]
-    
-    elif name== "list_directory":
-        try:
-            path = arguments.get("path", ".")
-            result = tools.list_directory(path)
-            return [TextContent(type="text", text=result)]
-        except Exception as e:
-            return [TextContent(type="text", text=f"Error: {str(e)}")]
-
-    raise ValueError(f"Unknown tool: {name}")
+    if name not in TOOLS_MAP:
+        raise ValueError(f"Unknown tool: {name}")
+    try:
+        handler = TOOLS_MAP[name]
+        result = handler(**arguments)
+        return [TextContent(type="text", text=str(result))]
+    except Exception as e:
+        return [TextContent(type="text", text=f"Tool Execution Error: {str(e)}")]
 
 async def main():
     async with stdio_server() as (read_stream, write_stream):
