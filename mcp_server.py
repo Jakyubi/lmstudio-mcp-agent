@@ -30,7 +30,10 @@ async def list_tools():
         ),
         Tool(
             name="list_directory",
-            description="Displays content of given directory (files, folders).",
+            description="Lists all files and subdirectories in a given path. This is your PRIMARY tool for exploring "
+                "the file system. Use this tool BEFORE assuming a file or folder exists. NEVER guess or "
+                "hallucinate directory names. If you are searching for something, start by listing the root "
+                "or parent directory to verify the actual structure.",
             inputSchema={
                 "type": "object",
                 "properties": {
