@@ -19,7 +19,7 @@ client = OpenAI(
     timeout=60.0
 )
 
-def conver_tools(mcp_tools):
+def convert_tools(mcp_tools):
     return[{
         "type": "function",
         "function":{
@@ -40,45 +40,65 @@ async def ask_agent(user_input: str, messages_history: list):
             await session.initialize()
 
             tools_response = await session.list_tools()
-            openai_tools = conver_tools(tools_response.tools)
+            openai_tools = convert_tools(tools_response.tools)
 
             messages_history.append({"role": "user", "content": user_input})
 
-            response = client.chat.completions.create(
-                model="local-model",
-                messages=messages_history,
-                tools=openai_tools
-            )
+            max_iterations = 5
 
-            msg = response.choices[0].message
+            for iteration in range(max_iterations):
 
-            if msg.tool_calls:
-                messages_history.append(msg.model_dump())
-                tool_call = msg.tool_calls[0]
-                tool_args = json.loads(tool_call.function.arguments)
-                result = await session.call_tool(
-                    tool_call.function.name,
-                    tool_args
-                )
-                result_text = result.content[0].text
+                with st.spinner("Analyzing..."):
+                    response = client.chat.completions.create(
+                        model="local-model",
+                        messages=messages_history,
+                        tools=openai_tools
+                    )
 
-                messages_history.append({
-                    "tool_call_id": tool_call.id,
-                    "role": "tool",
-                    "name": tool_call.function.name,
-                    "content": result_text
-                })
+                msg = response.choices[0].message
 
-                response2 = client.chat.completions.create(
-                    model="local-model",
-                    messages=messages_history
-                )
-                final_msg = response2.choices[0].message
-                messages_history.append({"role": "assistant", "content": final_msg.content})
-            else:
-                messages_history.append({"role": "assistant", "content": msg.content})
+                if msg.tool_calls:
+                    messages_history.append(msg.model_dump())
 
-            
+                    for tool_call in msg.tool_calls:
+                        tool_name = tool_call.function.name
+                        tool_args_str = tool_call.function.arguments
+
+                        with st.status(f"Running tool: {tool_name}", expanded=True) as status:
+                            st.write(f"Arguments: `{tool_args_str}`")
+
+                            try:
+                                tool_args = json.loads(tool_args_str)
+                                result = await session.call_tool(
+                                    tool_name,
+                                    tool_args
+                                )
+                                result_text = result.content[0].text
+                                st.success("Completed")
+                                st.code(result_text)
+                            except Exception as e:
+                                result_text=f"Error using tool: {str(e)}"
+                                st.error(result_text)
+
+                            status.update(state="complete")
+
+                        messages_history.append({
+                            "tool_call_id": tool_call.id,
+                            "role": "tool",
+                            "name": tool_call.function.name,
+                            "content": result_text
+                        })
+                    continue
+
+                else:
+                    messages_history.append({"role": "assistant", "content": msg.content})
+                    st.markdown(msg.content)
+                    return
+                
+            timeout_msg = "Task required too many steps to complete."
+            messages_history.append({"role": "assistant", "content": timeout_msg})
+            st.warning(timeout_msg)
+                
 
 
 st.set_page_config(page_title="LM Studio MCP App")
@@ -93,8 +113,6 @@ with st.sidebar:
 
 if "history" not in st.session_state:
     st.session_state.history = []
-
-
 
 for msg in st.session_state.history:
     role = msg.get("role")
