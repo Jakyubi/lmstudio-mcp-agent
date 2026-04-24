@@ -1,3 +1,4 @@
+import json
 import streamlit as st
 import asyncio
 import os
@@ -28,7 +29,7 @@ def conver_tools(mcp_tools):
         }
     } for tool in mcp_tools]
 
-async def ask_agent(user_input: str):
+async def ask_agent(user_input: str, messages_history: list):
     server_params = StdioServerParameters(
         command="python",
         args=["mcp_server.py"]
@@ -41,46 +42,93 @@ async def ask_agent(user_input: str):
             tools_response = await session.list_tools()
             openai_tools = conver_tools(tools_response.tools)
 
-            messages = [
-                {"role": "user", "content": user_input}
-            ]
+            messages_history.append({"role": "user", "content": user_input})
 
             response = client.chat.completions.create(
                 model="local-model",
-                messages=messages,
+                messages=messages_history,
                 tools=openai_tools
             )
 
             msg = response.choices[0].message
 
             if msg.tool_calls:
+                messages_history.append(msg.model_dump())
                 tool_call = msg.tool_calls[0]
+                tool_args = json.loads(tool_call.function.arguments)
                 result = await session.call_tool(
                     tool_call.function.name,
-                    {}
+                    tool_args
                 )
+                result_text = result.content[0].text
 
-                return result.content[0].text
-            return msg.content
+                messages_history.append({
+                    "tool_call_id": tool_call.id,
+                    "role": "tool",
+                    "name": tool_call.function.name,
+                    "content": result_text
+                })
+
+                response2 = client.chat.completions.create(
+                    model="local-model",
+                    messages=messages_history
+                )
+                final_msg = response2.choices[0].message
+                messages_history.append({"role": "assistant", "content": final_msg.content})
+            else:
+                messages_history.append({"role": "assistant", "content": msg.content})
+
             
 
 
+st.set_page_config(page_title="LM Studio MCP App")
 st.title("LM Studio MCP App")
+
+with st.sidebar:
+    st.header("Settings")
+
+    if st.button("Clear chat"):
+        st.session_state.history = []
+        st.rerun()
 
 if "history" not in st.session_state:
     st.session_state.history = []
 
-for h in st.session_state.history:
-    st.write(h)
+
+
+for msg in st.session_state.history:
+    role = msg.get("role")
+
+    if role == "user":
+        with st.chat_message("user"):
+            st.markdown(msg.get("content", ""))
+
+    elif role=="assistant":
+        with st.chat_message("assistant"):
+
+            if msg.get("tool_calls"):
+                for tool in msg["tool_calls"]:
+                    with st.status(f"{tool['function']['name']}", state="complete"):
+                        st.code(tool['function'].get("arguments", ""))
+            
+            if msg.get("content"):
+                st.markdown(msg["content"])
+
+    elif role == "tool":
+        with st.expander(f"Tool: {msg['name']}"):
+            st.code(msg.get("content", ""))
+
+
+
 
 prompt = st.chat_input("Hello world!")
 
 if prompt:
-    st.session_state.history.append(f"You: {prompt}")
-
-    with st.spinner("Thinking..."):
-        answer = asyncio.run(ask_agent(prompt))
-
-    st.session_state.history.append(f"AI: {answer}")
+    with st.chat_message("user"):
+        st.markdown(prompt)
+    
+    with st.chat_message("assistant"):
+        with st.spinner("Thinking..."):
+            answer = asyncio.run(ask_agent(prompt, st.session_state.history))
 
     st.rerun()
