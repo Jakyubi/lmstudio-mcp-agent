@@ -47,6 +47,7 @@ async def ask_agent(user_input: str, messages_history: list):
 
     ALWAYS OBSERVE BEFORE ACTING: If you need to choose, select, or modify something and you don't have the current list of items, your FIRST step MUST be to use a tool to list/observe the environment. NEVER guess names of files or directories.
     
+    /no_think
     """
 
     async with stdio_client(server_params) as (read, write):
