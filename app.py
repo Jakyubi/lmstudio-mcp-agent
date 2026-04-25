@@ -2,11 +2,19 @@ import json
 import streamlit as st
 import asyncio
 import os
+import logging
 from dotenv import load_dotenv
 from openai import OpenAI
 
 from mcp.client.stdio import stdio_client, StdioServerParameters
 from mcp import ClientSession
+
+logging.basicConfig(
+    filename="app_debug.log",
+    level=logging.DEBUG,
+    format='%(asctime)s - [APP] - %(levelname)s - %(message)s',
+    encoding='utf-8'
+)
 
 load_dotenv()
 
@@ -30,6 +38,7 @@ def convert_tools(mcp_tools):
     } for tool in mcp_tools]
 
 async def ask_agent(user_input: str, messages_history: list):
+    logging.info(f"\n\nNew user request: {user_input}")
     server_params = StdioServerParameters(
         command="python",
         args=["mcp_server.py"]
@@ -53,6 +62,7 @@ async def ask_agent(user_input: str, messages_history: list):
     async with stdio_client(server_params) as (read, write):
         async with ClientSession(read, write) as session:
             await session.initialize()
+            logging.info("MCP session initialized.")
 
             tools_response = await session.list_tools()
             openai_tools = convert_tools(tools_response.tools)
@@ -62,7 +72,7 @@ async def ask_agent(user_input: str, messages_history: list):
             max_iterations = 5
 
             for iteration in range(max_iterations):
-
+                logging.info(f"Agent loop - iteration: {iteration+1}")
                 system_prompt_msg = [{"role": "system", "content": system_prompt}] + messages_history
 
                 with st.spinner("Analyzing..."):
@@ -76,11 +86,13 @@ async def ask_agent(user_input: str, messages_history: list):
                 msg = response.choices[0].message
 
                 if msg.tool_calls:
+                    logging.info(f"Model decided to use {len(msg.tool_calls)} tool(s).")
                     messages_history.append(msg.model_dump())
 
                     for tool_call in msg.tool_calls:
                         tool_name = tool_call.function.name
                         tool_args_str = tool_call.function.arguments
+                        logging.info(f"Calling tool: {tool_name} with arguments: {tool_args_str}")
 
                         with st.status(f"Running tool: {tool_name}", expanded=True) as status:
                             st.write(f"Arguments: `{tool_args_str}`")
@@ -92,10 +104,12 @@ async def ask_agent(user_input: str, messages_history: list):
                                     tool_args
                                 )
                                 result_text = result.content[0].text
+                                logging.debug(f"Server result for {tool_name}: {result_text}")
                                 st.success("Completed")
                                 st.code(result_text)
                             except Exception as e:
                                 result_text=f"Error using tool: {str(e)}"
+                                logging.exception(f"App error during communication with tool {tool_name}")
                                 st.error(result_text)
 
                             status.update(state="complete")
@@ -109,11 +123,13 @@ async def ask_agent(user_input: str, messages_history: list):
                     continue
 
                 else:
+                    logging.info("Model returned a text response. Ending loop.")
                     messages_history.append({"role": "assistant", "content": msg.content})
                     st.markdown(msg.content)
                     return
                 
             timeout_msg = "Task required too many steps to complete."
+            logging.warning("Maximum agent iterations exceeded.")
             messages_history.append({"role": "assistant", "content": timeout_msg})
             st.warning(timeout_msg)
                 

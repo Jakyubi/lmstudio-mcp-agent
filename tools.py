@@ -1,10 +1,16 @@
 import os
+import logging
 from datetime import datetime
 
+logger = logging.getLogger(__name__)
+
 def get_current_datetime():
+    logging.debug("get_current_datetime called")
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 def list_directory(path: str):
+    logging.debug("list_directory called")
+    
     if not os.path.exists(path):
         return f"Error: Path '{path}' does not exist."
     if not os.path.isdir(path):

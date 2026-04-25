@@ -54,16 +54,24 @@ async def list_tools():
 
 @server.call_tool()
 async def call_tool(name: str, arguments: dict):
+    logging.info(f"\n\nReceived tool call request: {name}")
+    logging.debug(f"Arguments for {name}: {arguments}")
+
     if name not in TOOLS_MAP:
+        logging.error(f"Requested unknown tool: {name}")
         raise ValueError(f"Unknown tool: {name}")
     try:
         handler = TOOLS_MAP[name]
         result = handler(**arguments)
+        logging.info(f"Tool {name} executed successfully.")
+        logging.debug(f"Tool {name} result: {result}")
         return [TextContent(type="text", text=str(result))]
     except Exception as e:
+        logging.exception(f"Error executing tool: {name}")
         return [TextContent(type="text", text=f"Tool Execution Error: {str(e)}")]
 
 async def main():
+    logging.info("Starting MCP server.")
     async with stdio_server() as (read_stream, write_stream):
         await server.run(
             read_stream,
