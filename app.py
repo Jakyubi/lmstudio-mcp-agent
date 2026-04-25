@@ -146,7 +146,7 @@ with st.sidebar:
         st.rerun()
 
     if st.button("Clear logs"):
-        log_files=["app_debug.log", "mcp_server.log"]
+        log_files=["app_debug.log", "mcp_server_debug.log"]
 
         for file_path in log_files:
             if os.path.exists(file_path):
