@@ -58,81 +58,92 @@ async def ask_agent(user_input: str, messages_history: list):
     
     /no_think
     """
+    try:
+        async with stdio_client(server_params) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                logging.info("MCP session initialized.")
 
-    async with stdio_client(server_params) as (read, write):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
-            logging.info("MCP session initialized.")
+                tools_response = await session.list_tools()
+                openai_tools = convert_tools(tools_response.tools)
 
-            tools_response = await session.list_tools()
-            openai_tools = convert_tools(tools_response.tools)
+                messages_history.append({"role": "user", "content": user_input})
 
-            messages_history.append({"role": "user", "content": user_input})
+                max_iterations = 5
 
-            max_iterations = 5
+                for iteration in range(max_iterations):
+                    logging.info(f"Agent loop - iteration: {iteration+1}")
+                    system_prompt_msg = [{"role": "system", "content": system_prompt}] + messages_history
 
-            for iteration in range(max_iterations):
-                logging.info(f"Agent loop - iteration: {iteration+1}")
-                system_prompt_msg = [{"role": "system", "content": system_prompt}] + messages_history
+                    with st.spinner("LLM: Awaiting inference..."):
+                        try:
+                            response = client.chat.completions.create(
+                                model="local-model",
+                                messages=system_prompt_msg,
+                                tools=openai_tools,
+                                temperature=0.2
+                            )
+                        except Exception as e:
+                            error_msg = f"API Connection Error: Cannot connect to LLM, check LM Studio. ({str(e)})"
+                            logging.exception("Error connecting with LLM API.")
+                            st.error(error_msg)
+                            messages_history.append({"role": "assistant", "content": error_msg})
+                            return
 
-                with st.spinner("Analyzing..."):
-                    response = client.chat.completions.create(
-                        model="local-model",
-                        messages=system_prompt_msg,
-                        tools=openai_tools,
-                        temperature=0.2
-                    )
+                    msg = response.choices[0].message
 
-                msg = response.choices[0].message
+                    if msg.tool_calls:
+                        logging.info(f"Model decided to use {len(msg.tool_calls)} tool(s).")
+                        messages_history.append(msg.model_dump())
 
-                if msg.tool_calls:
-                    logging.info(f"Model decided to use {len(msg.tool_calls)} tool(s).")
-                    messages_history.append(msg.model_dump())
+                        for tool_call in msg.tool_calls:
+                            tool_name = tool_call.function.name
+                            tool_args_str = tool_call.function.arguments
+                            logging.info(f"Calling tool: {tool_name} with arguments: {tool_args_str}")
 
-                    for tool_call in msg.tool_calls:
-                        tool_name = tool_call.function.name
-                        tool_args_str = tool_call.function.arguments
-                        logging.info(f"Calling tool: {tool_name} with arguments: {tool_args_str}")
+                            with st.status(f"Running tool: {tool_name}", expanded=True) as status:
+                                st.write(f"Arguments: `{tool_args_str}`")
 
-                        with st.status(f"Running tool: {tool_name}", expanded=True) as status:
-                            st.write(f"Arguments: `{tool_args_str}`")
+                                try:
+                                    tool_args = json.loads(tool_args_str)
+                                    result = await session.call_tool(
+                                        tool_name,
+                                        tool_args
+                                    )
+                                    result_text = result.content[0].text
+                                    logging.debug(f"Server result for {tool_name}: {result_text}")
+                                    st.success("Completed")
+                                    st.code(result_text)
+                                except Exception as e:
+                                    result_text=f"Error using tool: {str(e)}"
+                                    logging.exception(f"App error during communication with tool {tool_name}")
+                                    st.error(result_text)
 
-                            try:
-                                tool_args = json.loads(tool_args_str)
-                                result = await session.call_tool(
-                                    tool_name,
-                                    tool_args
-                                )
-                                result_text = result.content[0].text
-                                logging.debug(f"Server result for {tool_name}: {result_text}")
-                                st.success("Completed")
-                                st.code(result_text)
-                            except Exception as e:
-                                result_text=f"Error using tool: {str(e)}"
-                                logging.exception(f"App error during communication with tool {tool_name}")
-                                st.error(result_text)
+                                status.update(state="complete")
 
-                            status.update(state="complete")
+                            messages_history.append({
+                                "tool_call_id": tool_call.id,
+                                "role": "tool",
+                                "name": tool_call.function.name,
+                                "content": result_text
+                            })
+                        continue
 
-                        messages_history.append({
-                            "tool_call_id": tool_call.id,
-                            "role": "tool",
-                            "name": tool_call.function.name,
-                            "content": result_text
-                        })
-                    continue
-
-                else:
-                    logging.info("Model returned a text response. Ending loop.")
-                    messages_history.append({"role": "assistant", "content": msg.content})
-                    st.markdown(msg.content)
-                    return
-                
-            timeout_msg = "Task required too many steps to complete."
-            logging.warning("Maximum agent iterations exceeded.")
-            messages_history.append({"role": "assistant", "content": timeout_msg})
-            st.warning(timeout_msg)
-                
+                    else:
+                        logging.info("Model returned a text response. Ending loop.")
+                        messages_history.append({"role": "assistant", "content": msg.content})
+                        st.markdown(msg.content)
+                        return
+                    
+                timeout_msg = "Task required too many steps to complete."
+                logging.warning("Maximum agent iterations exceeded.")
+                messages_history.append({"role": "assistant", "content": timeout_msg})
+                st.warning(timeout_msg)
+    except Exception as e:
+        error_msg = f"MCP Server Error: Could not connect with mcp_server.py. ({str(e)})"
+        logging.exception("Error initializing MCP session.")
+        st.error(error_msg)
+        messages_history.append({"role": "assistant", "content": error_msg})
 
 
 st.set_page_config(page_title="LM Studio MCP App")
@@ -192,7 +203,7 @@ if prompt:
         st.markdown(prompt)
     
     with st.chat_message("assistant"):
-        with st.spinner("Thinking..."):
+        with st.spinner("Executing task workflow..."):
             answer = asyncio.run(ask_agent(prompt, st.session_state.history))
 
     st.rerun()
