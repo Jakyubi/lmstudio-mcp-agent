@@ -30,3 +30,21 @@ def list_directory(path: str):
         return "\n".join(result)
     except Exception as e:
         return f"Error reading folder: {str(e)}"
+    
+def read_file(file_path: str):
+    logging.debug("read_file called")
+    if not os.path.exists(file_path):
+        return f"Error: File '{file_path}' doesn't exist."
+    if not os.path.isfile(file_path):
+        return f"Error: Path '{file_path}' is not a file."
+    
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+            if not content.strip():
+                return f"File '{file_path}' is empty"
+            return f"--- Beginning of file {file_path} ---\n{content}\n--- End of file ---"
+    except UnicodeDecodeError:
+        return f"Error: File '{file_path}' is probably a binary file, not text file."
+    except Exception as e:
+        return f"Error reading file: {str(e)}"

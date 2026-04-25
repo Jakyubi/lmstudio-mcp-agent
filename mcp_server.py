@@ -19,7 +19,8 @@ server = Server("mcp-server")
 
 TOOLS_MAP = {
     "get_current_datetime": tools.get_current_datetime,
-    "list_directory": tools.list_directory
+    "list_directory": tools.list_directory,
+    "read_file": tools.read_file
 }
 
 @server.list_tools()
@@ -48,6 +49,20 @@ async def list_tools():
                     }
                 },
                 "required": ["path"]
+            }
+        ),
+        Tool(
+            name="read_file",
+            description="Reads text file",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "file_path":{
+                        "type": "string",
+                        "description":"Exact path to a file you want to read."
+                    }
+                },
+                "required": ["file_path"]
             }
         )
     ]
