@@ -145,6 +145,18 @@ with st.sidebar:
         st.session_state.history = []
         st.rerun()
 
+    if st.button("Clear logs"):
+        log_files=["app_debug.log", "mcp_server.log"]
+
+        for file_path in log_files:
+            if os.path.exists(file_path):
+                try:
+                    with open(file_path, 'w', encoding='utf-8') as f:
+                        f.truncate(0)
+                except Exception as e:
+                    st.error(f"Couldn't clear {file_path}: {e}")
+        st.success("Logs cleared.")
+
 if "history" not in st.session_state:
     st.session_state.history = []
 
