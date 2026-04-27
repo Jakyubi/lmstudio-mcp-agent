@@ -81,3 +81,76 @@ def get_git_diff(repo_path: str="."):
         return "Error: 'git' command not found. Check git installation."
     except Exception as e:
         return f"Error: {str(e)}"
+    
+def git_commit(repo_path: str, message: str, files_to_add: str="."):
+    logging.debug("git_commit called")
+    if not os.path.exists(repo_path):
+        return f"Error: Path '{repo_path}' does not exist."
+    if not os.path.isdir(repo_path):
+        return f"Error: Path '{repo_path}' is not a folder."
+    
+    try:
+        subprocess.run(
+            ['git', 'add', files_to_add],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            check=True,
+            stdin=subprocess.DEVNULL,
+            timeout=10
+        )
+
+        commit_result= subprocess.run(
+            ['git', 'commit', '-m', message],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            check=True,
+            stdin=subprocess.DEVNULL,
+            timeout=10
+        )
+
+        return f"--- Commit successful ---\n{commit_result.stdout.strip()}\n--- End ---"
+    
+    except subprocess.TimeoutExpired:
+        return "Error: Git operations exceeded time limit."
+    except subprocess.CalledProcessError as e:
+        output= e.stdout.strip() if e.stdout else e.stderr.strip()
+        return f"Git error: {output}"
+    except FileNotFoundError:
+        return "Error: 'git' command not found. Check git installation."
+    except Exception as e:
+        return f"Error: {str(e)}"
+    
+
+
+def git_push(repo_path: str):
+    logging.debug("git_push called")
+    if not os.path.exists(repo_path):
+        return f"Error: Path '{repo_path}' does not exist."
+    if not os.path.isdir(repo_path):
+        return f"Error: Path '{repo_path}' is not a folder."
+    
+    try:
+        push_result= subprocess.run(
+            ['git', 'push'],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            check=True,
+            stdin=subprocess.DEVNULL,
+            timeout=20
+        )
+        output = push_result.stderr.strip() if push_result.stderr else push_result.stdout.strip()
+        return f"--- Push successful ---\n{output}\n--- End ---"
+    
+    except subprocess.TimeoutExpired:
+        return "Error: Git push exceeded time limit."
+    except subprocess.CalledProcessError as e:
+        output= e.stdout.strip() if e.stdout else e.stderr.strip()
+        return f"Git error: {output}"
+    except FileNotFoundError:
+        return "Error: 'git' command not found. Check git installation."
+    except Exception as e:
+        return f"Error: {str(e)}"
+    

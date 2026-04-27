@@ -21,7 +21,9 @@ TOOLS_MAP = {
     "get_current_datetime": tools.get_current_datetime,
     "list_directory": tools.list_directory,
     "read_file": tools.read_file,
-    "get_git_diff": tools.get_git_diff
+    "get_git_diff": tools.get_git_diff,
+    "git_commit": tools.git_commit,
+    "git_push": tools.git_push
 }
 
 @server.list_tools()
@@ -74,7 +76,43 @@ async def list_tools():
                 "properties":{
                     "repo_path":{
                         "type": "string",
-                        "description": "Path to Git repositorium."
+                        "description": "Path to Git repository."
+                    }
+                },
+                "required": ["repo_path"]
+            }
+        ),
+        Tool(
+            name="git_commit",
+            description="Stages files and creates a new Git commit. Only use this tool if the user asks you to commit changes to git. Always use a clear, descriptive commit message based on actual changes.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "repo_path":{
+                        "type": "string",
+                        "description": "Path to Git repository. Use '.' for current directory."
+                    },
+                    "message":{
+                        "type": "string",
+                        "description": "The commit message explaining changes."
+                    },
+                    "files_to_add":{
+                        "type":"string",
+                        "description": "Files to stage before commiting. Defaults to '.' (which stages all files). You can specify a single file path if the user requests it."
+                    }
+                },
+                "required": ["repo_path", "message"]
+            }
+        ),
+        Tool(
+            name="git_push",
+            description="Pushes committed local changes to the remote repository. Only use when user asks you to push changes to GitHub.",
+            inputSchema={
+                "type": "object",
+                "properties":{
+                    "repo_path":{
+                        "type": "string",
+                        "description": "Path to Git repository."
                     }
                 },
                 "required": ["repo_path"]
