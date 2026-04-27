@@ -20,7 +20,8 @@ server = Server("mcp-server")
 TOOLS_MAP = {
     "get_current_datetime": tools.get_current_datetime,
     "list_directory": tools.list_directory,
-    "read_file": tools.read_file
+    "read_file": tools.read_file,
+    "get_git_diff": tools.get_git_diff
 }
 
 @server.list_tools()
@@ -63,6 +64,20 @@ async def list_tools():
                     }
                 },
                 "required": ["file_path"]
+            }
+        ),
+        Tool(
+            name="get_git_diff",
+            description="Gets detailed code differences. Use this tool when a user asks to do a code review, check what they changed or find a bug in uncommitted code. The tool returns the exact code that was added or removed.",
+            inputSchema={
+                "type": "object",
+                "properties":{
+                    "repo_path":{
+                        "type": "string",
+                        "description": "Path to Git repositorium."
+                    }
+                },
+                "required": ["repo_path"]
             }
         )
     ]

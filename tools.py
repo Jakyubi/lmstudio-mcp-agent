@@ -1,5 +1,6 @@
 import os
 import logging
+import subprocess
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -48,3 +49,35 @@ def read_file(file_path: str):
         return f"Error: File '{file_path}' is probably a binary file, not text file."
     except Exception as e:
         return f"Error reading file: {str(e)}"
+    
+def get_git_diff(repo_path: str="."):
+    logging.debug("get_git_diff called")
+    if not os.path.exists(repo_path):
+        return f"Error: Path '{repo_path}' does not exist."
+    if not os.path.isdir(repo_path):
+        return f"Error: Path '{repo_path}' is not a folder."
+    
+    try:
+        result = subprocess.run(
+            ['git', 'diff'],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            check=True,
+            stdin=subprocess.DEVNULL,
+            timeout=10
+        )
+        diff_output=result.stdout.strip()
+
+        if not diff_output:
+            return f"--- Result of git diff for {repo_path} ---\nNo changes\n--- End ---"
+        return f"--- Result of git diff for {repo_path} ---\n{diff_output}\n--- End ---"
+    
+    except subprocess.TimeoutExpired:
+        return "Error: Git Diff exceeded time limit."
+    except subprocess.CalledProcessError as e:
+        return f"Git error: {e.stderr.strip()}"
+    except FileNotFoundError:
+        return "Error: 'git' command not found. Check git installation."
+    except Exception as e:
+        return f"Error: {str(e)}"
