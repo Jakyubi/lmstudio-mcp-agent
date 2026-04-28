@@ -6,10 +6,12 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 def get_current_datetime():
+    """Returns current date and time"""
     logging.debug("get_current_datetime called")
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 def list_directory(path: str):
+    """Lists the contents of a specified directory"""
     logging.debug("list_directory called")
     
     if not os.path.exists(path):
@@ -33,6 +35,7 @@ def list_directory(path: str):
         return f"Error reading folder: {str(e)}"
     
 def read_file(file_path: str):
+    """Reads the content of text file."""
     logging.debug("read_file called")
     if not os.path.exists(file_path):
         return f"Error: File '{file_path}' doesn't exist."
@@ -51,6 +54,7 @@ def read_file(file_path: str):
         return f"Error reading file: {str(e)}"
     
 def get_git_diff(repo_path: str="."):
+    """Returns the differences in uncommitted code in a given repository"""
     logging.debug("get_git_diff called")
     if not os.path.exists(repo_path):
         return f"Error: Path '{repo_path}' does not exist."
@@ -58,6 +62,7 @@ def get_git_diff(repo_path: str="."):
         return f"Error: Path '{repo_path}' is not a folder."
     
     try:
+        # Execute 'git diff' command as a subprocess without user interaction
         result = subprocess.run(
             ['git', 'diff'],
             cwd=repo_path,
@@ -83,6 +88,7 @@ def get_git_diff(repo_path: str="."):
         return f"Error: {str(e)}"
     
 def git_commit(repo_path: str, message: str, files_to_add: str="."):
+    """Adds files to the staging area and creates a new commit"""
     logging.debug("git_commit called")
     if not os.path.exists(repo_path):
         return f"Error: Path '{repo_path}' does not exist."
@@ -90,6 +96,7 @@ def git_commit(repo_path: str, message: str, files_to_add: str="."):
         return f"Error: Path '{repo_path}' is not a folder."
     
     try:
+        # Phase 1: git add
         subprocess.run(
             ['git', 'add', files_to_add],
             cwd=repo_path,
@@ -100,6 +107,7 @@ def git_commit(repo_path: str, message: str, files_to_add: str="."):
             timeout=10
         )
 
+        # Phase 2: git commit
         commit_result= subprocess.run(
             ['git', 'commit', '-m', message],
             cwd=repo_path,
@@ -125,6 +133,7 @@ def git_commit(repo_path: str, message: str, files_to_add: str="."):
 
 
 def git_push(repo_path: str):
+    """Pushes committed changes to the remote repository"""
     logging.debug("git_push called")
     if not os.path.exists(repo_path):
         return f"Error: Path '{repo_path}' does not exist."

@@ -8,6 +8,7 @@ from mcp.types import Tool, TextContent
 
 import tools
 
+# Logging configuration
 logging.basicConfig(
     filename="mcp_server_debug.log",
     level=logging.DEBUG,
@@ -17,6 +18,7 @@ logging.basicConfig(
 
 server = Server("mcp-server")
 
+# Map linking tool names to functions from tools.py
 TOOLS_MAP = {
     "get_current_datetime": tools.get_current_datetime,
     "list_directory": tools.list_directory,
@@ -28,6 +30,7 @@ TOOLS_MAP = {
 
 @server.list_tools()
 async def list_tools():
+    """Defines tool schemas (name, description, arguments)"""
     return[
         Tool(
             name="get_current_datetime",
@@ -122,6 +125,7 @@ async def list_tools():
 
 @server.call_tool()
 async def call_tool(name: str, arguments: dict):
+    """Receives a tool execution request from the client, maps it, and executes the function"""
     logging.info(f"\n\nReceived tool call request: {name}")
     logging.debug(f"Arguments for {name}: {arguments}")
 
@@ -139,6 +143,7 @@ async def call_tool(name: str, arguments: dict):
         return [TextContent(type="text", text=f"Tool Execution Error: {str(e)}")]
 
 async def main():
+    """Starts MCP server using standard I/O streams"""
     logging.info("Starting MCP server.")
     async with stdio_server() as (read_stream, write_stream):
         await server.run(
