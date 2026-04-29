@@ -2,6 +2,7 @@ import json
 import streamlit as st
 import asyncio
 import os
+import sys
 import logging
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -47,7 +48,7 @@ async def ask_agent(user_input: str, messages_history: list):
 
     # Parameter configuration for MCP server
     server_params = StdioServerParameters(
-        command="python",
+        command=sys.executable,
         args=["mcp_server.py"]
     )
 
