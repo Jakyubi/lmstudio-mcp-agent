@@ -52,9 +52,41 @@ def read_file(file_path: str):
         return f"Error: File '{file_path}' is probably a binary file, not text file."
     except Exception as e:
         return f"Error reading file: {str(e)}"
+
+def git_status(repo_path: str = "."):
+    """Returns the current status of the Git repository (short format)"""
+    logging.debug("git_status called")
+    if not os.path.exists(repo_path):
+        return f"Error: Path '{repo_path}' does not exist."
+    if not os.path.isdir(repo_path):
+        return f"Error: Path '{repo_path}' is not a folder."
     
 def get_git_diff(repo_path: str="."):
     """Returns the differences in uncommitted code in a given repository"""
+    try:
+        result = subprocess.run(
+            ['git', 'status', '--short'],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            check=True,
+            stdin=subprocess.DEVNULL,
+            timeout=10
+        )
+        output = result.stdout.strip()
+        if not output:
+            return f"--- Git status for {repo_path} ---\nWorking tree clean (no changes)\n--- End ---"
+        return f"--- Git status for {repo_path} ---\n{output}\n--- End ---"
+    
+    except subprocess.TimeoutExpired:
+        return "Error: Git status exceeded time limit."
+    except subprocess.CalledProcessError as e:
+        output = e.stdout.strip() if e.stdout else e.stderr.strip()
+        return f"Git error: {output}"
+    except FileNotFoundError:
+        return "Error: 'git' command not found. Check git installation."
+    except Exception as e:
+        return f"Error: {str(e)}"
     logging.debug("get_git_diff called")
     if not os.path.exists(repo_path):
         return f"Error: Path '{repo_path}' does not exist."

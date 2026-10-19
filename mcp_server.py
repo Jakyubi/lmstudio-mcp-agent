@@ -27,6 +27,7 @@ TOOLS_MAP = {
     "get_current_datetime": tools.get_current_datetime,
     "list_directory": tools.list_directory,
     "read_file": tools.read_file,
+    "git_status": tools.git_status,
     "get_git_diff": tools.get_git_diff,
     "git_commit": tools.git_commit,
     "git_push": tools.git_push
@@ -75,6 +76,22 @@ async def list_tools():
                     }
                 },
                 "required": ["file_path"]
+            }
+        ),
+        Tool(
+            name="git_status",
+            description="Returns an overview of changes in the repository (modified, staged, untracked files). "
+                        "Use this tool FIRST when asked about repository state, commits, or code reviews to identify "
+                        "which files were modified before fetching a full diff.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "repo_path": {
+                        "type": "string",
+                        "description": "Path to Git repository. Use '.' for current directory."
+                    }
+                },
+                "required": ["repo_path"]
             }
         ),
         Tool(
