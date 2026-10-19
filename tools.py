@@ -186,9 +186,19 @@ def git_commit(repo_path: str, message: str, files_to_add: str="."):
         return f"Error: Path '{repo_path}' is not a folder."
     
     try:
+        raw_files = files_to_add.strip() if files_to_add else "."
+        if raw_files == ".":
+            targets = ["."]
+        else:
+            try:
+                targets = shlex.split(raw_files, posix=(os.name != 'nt'))
+                targets = [t.strip('"\'') for t in targets if t.strip()]
+            except ValueError:
+                targets = raw_files.split()
+
         # Phase 1: git add
         subprocess.run(
-            ['git', 'add', files_to_add],
+            ['git', 'add'] + targets,
             cwd=repo_path,
             capture_output=True,
             text=True,
