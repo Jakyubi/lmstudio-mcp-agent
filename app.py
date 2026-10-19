@@ -7,7 +7,7 @@ import logging
 from dotenv import load_dotenv
 from openai import OpenAI
 
-from mcp.client.stdio import stdio_client, StdioServerParameters
+from mcp.client.sse import sse_client
 from mcp import ClientSession
 
 # Logging configuration
@@ -46,11 +46,7 @@ async def ask_agent(user_input: str, messages_history: list):
     """Main function handling the agent's logic"""
     logging.info(f"\n\nNew user request: {user_input}")
 
-    # Parameter configuration for MCP server
-    server_params = StdioServerParameters(
-        command=sys.executable,
-        args=["mcp_server.py"]
-    )
+    server_url = "http://127.0.0.1:8000/sse"
 
 
     system_prompt = f"""
@@ -65,11 +61,10 @@ async def ask_agent(user_input: str, messages_history: list):
 
     ALWAYS OBSERVE BEFORE ACTING: If you need to choose, select, or modify something and you don't have the current list of items, your FIRST step MUST be to use a tool to list/observe the environment. NEVER guess names of files or directories.
     
-    /no_think
     """
     try:
-        # Start MCP client communicationg with server's stdio
-        async with stdio_client(server_params) as (read, write):
+        # Start MCP client communicationg with server
+        async with sse_client(server_url) as (read, write):
             async with ClientSession(read, write) as session:
                 await session.initialize()
                 logging.info("MCP session initialized.")

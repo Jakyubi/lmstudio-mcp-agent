@@ -1,9 +1,13 @@
-import asyncio
 import logging
+from starlette.applications import Starlette
+from starlette.routing import Route, Mount
+from starlette.requests import Request
+from starlette.responses import Response
+import uvicorn
 
+from mcp.server.sse import SseServerTransport
 from mcp.server import Server, NotificationOptions
 from mcp.server.models import InitializationOptions
-from mcp.server.stdio import stdio_server
 from mcp.types import Tool, TextContent
 
 import tools
@@ -142,10 +146,14 @@ async def call_tool(name: str, arguments: dict):
         logging.exception(f"Error executing tool: {name}")
         return [TextContent(type="text", text=f"Tool Execution Error: {str(e)}")]
 
-async def main():
-    """Starts MCP server using standard I/O streams"""
-    logging.info("Starting MCP server.")
-    async with stdio_server() as (read_stream, write_stream):
+
+sse = SseServerTransport("/messages/")
+
+async def handle_sse(request: Request):
+    """Handles SSE stream connection"""
+    async with sse.connect_sse(
+        request.scope, request.receive, request._send
+    ) as (read_stream, write_stream):
         await server.run(
             read_stream,
             write_stream,
@@ -158,6 +166,15 @@ async def main():
                 )
             )
         )
+    return Response()
+
+starlette_app = Starlette(
+    routes=[
+        Route("/sse", endpoint=handle_sse),
+        Mount("/messages/", app=sse.handle_post_message),
+    ]
+)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    logging.info("Starting MCP server.")
+    uvicorn.run(starlette_app, host="127.0.0.1", port=8000)
