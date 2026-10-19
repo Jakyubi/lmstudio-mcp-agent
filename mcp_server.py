@@ -30,7 +30,7 @@ TOOLS_MAP = {
     "git_status": tools.git_status,
     "get_git_diff": tools.get_git_diff,
     "git_commit": tools.git_commit,
-    "git_push": tools.git_push
+    "git_push": tools.git_push,
     "git_pull": tools.git_pull,
     "git_undo_last_commit": tools.git_undo_last_commit
 }
@@ -124,7 +124,7 @@ async def list_tools():
                     },
                     "files_to_add":{
                         "type":"string",
-                        "description": "Files to stage before commiting. Defaults to '.' (which stages all files). You can specify a single file path if the user requests it."
+                        "description": "Space-separated list of files to stage before committing (e.g. 'file1.html file2.html') or '.' to stage all changes."
                     }
                 },
                 "required": ["repo_path", "message"]

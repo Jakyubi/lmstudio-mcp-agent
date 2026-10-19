@@ -1,6 +1,7 @@
 import os
 import logging
 import subprocess
+import shlex
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -61,8 +62,6 @@ def git_status(repo_path: str = "."):
     if not os.path.isdir(repo_path):
         return f"Error: Path '{repo_path}' is not a folder."
     
-def get_git_diff(repo_path: str="."):
-    """Returns the differences in uncommitted code in a given repository"""
     try:
         result = subprocess.run(
             ['git', 'status', '--short'],
@@ -87,6 +86,9 @@ def get_git_diff(repo_path: str="."):
         return "Error: 'git' command not found. Check git installation."
     except Exception as e:
         return f"Error: {str(e)}"
+    
+def get_git_diff(repo_path: str = "."):
+    """Returns the differences in uncommitted code (staged, unstaged, and untracked files) in a given repository"""
     logging.debug("get_git_diff called")
     if not os.path.exists(repo_path):
         return f"Error: Path '{repo_path}' does not exist."
@@ -94,9 +96,49 @@ def get_git_diff(repo_path: str="."):
         return f"Error: Path '{repo_path}' is not a folder."
     
     try:
-        # Execute 'git diff' command as a subprocess without user interaction
-        result = subprocess.run(
-            ['git', 'diff'],
+        diff_parts = []
+
+        # Check whether repo has commits
+        has_head = subprocess.run(
+            ['git', 'rev-parse', '--verify', 'HEAD'],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            stdin=subprocess.DEVNULL,
+            timeout=5
+        ).returncode == 0
+
+        # Get diff
+        diff_cmd = ['git', 'diff', 'HEAD'] if has_head else ['git', 'diff', '--cached']
+        tracked_diff = subprocess.run(
+            diff_cmd,
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            check=True,
+            stdin=subprocess.DEVNULL,
+            timeout=10
+        ).stdout.strip()
+
+        if not has_head:
+            unstaged_diff = subprocess.run(
+                ['git', 'diff'],
+                cwd=repo_path,
+                capture_output=True,
+                text=True,
+                check=True,
+                stdin=subprocess.DEVNULL,
+                timeout=10
+            ).stdout.strip()
+            if unstaged_diff:
+                tracked_diff = f"{tracked_diff}\n{unstaged_diff}".strip()
+
+        if tracked_diff:
+            diff_parts.append(tracked_diff)
+
+        # Get new files list
+        untracked_proc = subprocess.run(
+            ['git', 'ls-files', '--others', '--exclude-standard'],
             cwd=repo_path,
             capture_output=True,
             text=True,
@@ -104,21 +146,37 @@ def get_git_diff(repo_path: str="."):
             stdin=subprocess.DEVNULL,
             timeout=10
         )
-        diff_output=result.stdout.strip()
+        untracked_files = [f.strip() for f in untracked_proc.stdout.splitlines() if f.strip()]
 
-        if not diff_output:
+        # Get diff for each new file
+        for file_rel_path in untracked_files:
+            diff_new = subprocess.run(
+                ['git', 'diff', '--no-index', '--', '/dev/null', file_rel_path],
+                cwd=repo_path,
+                capture_output=True,
+                text=True,
+                stdin=subprocess.DEVNULL,
+                timeout=5
+            )
+            if diff_new.stdout.strip():
+                diff_parts.append(diff_new.stdout.strip())
+
+        full_diff = "\n\n".join(diff_parts).strip()
+
+        if not full_diff:
             return f"--- Result of git diff for {repo_path} ---\nNo changes\n--- End ---"
-        return f"--- Result of git diff for {repo_path} ---\n{diff_output}\n--- End ---"
+        return f"--- Result of git diff for {repo_path} ---\n{full_diff}\n--- End ---"
     
     except subprocess.TimeoutExpired:
         return "Error: Git Diff exceeded time limit."
     except subprocess.CalledProcessError as e:
-        return f"Git error: {e.stderr.strip()}"
+        err = e.stderr.strip() if e.stderr else str(e)
+        return f"Git error: {err}"
     except FileNotFoundError:
         return "Error: 'git' command not found. Check git installation."
     except Exception as e:
         return f"Error: {str(e)}"
-    
+
 def git_commit(repo_path: str, message: str, files_to_add: str="."):
     """Adds files to the staging area and creates a new commit"""
     logging.debug("git_commit called")
