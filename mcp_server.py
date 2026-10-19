@@ -30,6 +30,7 @@ TOOLS_MAP = {
     "get_git_diff": tools.get_git_diff,
     "git_commit": tools.git_commit,
     "git_push": tools.git_push
+    "git_pull": tools.git_pull,
 }
 
 @server.list_tools()
@@ -124,7 +125,21 @@ async def list_tools():
                 },
                 "required": ["repo_path"]
             }
-        )
+        ),
+        Tool(
+            name="git_pull",
+            description="Pulls changes from the remote repository to synchronize local branch with remote before pushing. Use when remote changes need to be fetched.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "repo_path": {
+                        "type": "string",
+                        "description": "Path to Git repository. Use '.' for current directory."
+                    }
+                },
+                "required": ["repo_path"]
+            }
+        ), 
     ]
 
 @server.call_tool()

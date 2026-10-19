@@ -162,4 +162,46 @@ def git_push(repo_path: str):
         return "Error: 'git' command not found. Check git installation."
     except Exception as e:
         return f"Error: {str(e)}"
+
+def git_pull(repo_path: str = "."):
+    """Pulls changes from the remote repository safely"""
+    logging.debug("git_pull called")
+    if not os.path.exists(repo_path):
+        return f"Error: Path '{repo_path}' does not exist."
+    if not os.path.isdir(repo_path):
+        return f"Error: Path '{repo_path}' is not a folder."
     
+    try:
+        result = subprocess.run(
+            ['git', 'pull', '--no-rebase'],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            check=True,
+            stdin=subprocess.DEVNULL,
+            timeout=20
+        )
+        output = result.stdout.strip() or result.stderr.strip()
+        return f"--- Pull successful ---\n{output}\n--- End ---"
+    
+    except subprocess.CalledProcessError as e:
+        error_output = (e.stdout + "\n" + e.stderr).strip()
+        
+        # In case of conflict take a step back
+        if "conflict" in error_output.lower():
+            subprocess.run(
+                ['git', 'merge', '--abort'],
+                cwd=repo_path,
+                capture_output=True,
+                stdin=subprocess.DEVNULL
+            )
+            return (
+                f"Conflict detected during git pull! Merge was automatically aborted to preserve repository state. "
+                f"Conflicting files need to be resolved manually by the developer.\nDetails:\n{error_output}"
+            )
+            
+        return f"Git error: {error_output}"
+    except subprocess.TimeoutExpired:
+        return "Error: Git pull exceeded time limit."
+    except Exception as e:
+        return f"Error: {str(e)}"
