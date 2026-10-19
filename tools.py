@@ -205,3 +205,26 @@ def git_pull(repo_path: str = "."):
         return "Error: Git pull exceeded time limit."
     except Exception as e:
         return f"Error: {str(e)}"
+
+def git_undo_last_commit(repo_path: str = "."):
+    """Undoes the last local commit while preserving all changes in the working directory (git reset HEAD~1)"""
+    logging.debug("git_undo_last_commit called")
+    if not os.path.exists(repo_path) or not os.path.isdir(repo_path):
+        return f"Error: Path '{repo_path}' is not a valid directory."
+
+    try:
+        result = subprocess.run(
+            ['git', 'reset', 'HEAD~1'],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            check=True,
+            stdin=subprocess.DEVNULL,
+            timeout=10
+        )
+        output = result.stdout.strip() or result.stderr.strip()
+        return f"--- Successfully undone last commit ---\n{output}\nAll file changes were kept as uncommitted."
+    except subprocess.CalledProcessError as e:
+        return f"Git error: {e.stderr.strip() or e.stdout.strip()}"
+    except Exception as e:
+        return f"Error: {str(e)}"

@@ -31,6 +31,7 @@ TOOLS_MAP = {
     "git_commit": tools.git_commit,
     "git_push": tools.git_push
     "git_pull": tools.git_pull,
+    "git_undo_last_commit": tools.git_undo_last_commit
 }
 
 @server.list_tools()
@@ -140,6 +141,20 @@ async def list_tools():
                 "required": ["repo_path"]
             }
         ), 
+        Tool(
+            name="git_undo_last_commit",
+            description="Undoes the most recent local commit while keeping all changes in the files. Use this ONLY when the user explicitly requests to undo or revert the last commit.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "repo_path": {
+                        "type": "string",
+                        "description": "Path to Git repository. Use '.' for current directory."
+                    }
+                },
+                "required": ["repo_path"]
+            }
+        ),
     ]
 
 @server.call_tool()
