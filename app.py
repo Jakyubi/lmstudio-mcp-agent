@@ -88,7 +88,7 @@ async def ask_agent(user_input: str, messages_history: list):
                 openai_tools = convert_tools(tools_response.tools)
 
                 # Agent loop iteration limit
-                max_iterations = 5
+                max_iterations = 10
 
                 # Main agent loop
                 for iteration in range(max_iterations):
