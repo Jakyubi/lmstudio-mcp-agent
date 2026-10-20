@@ -128,7 +128,8 @@ async def ask_agent(user_input: str, messages_history: list):
                                 tool_args = {}
                                 logging.error(f"JSON decode error: {e}")
 
-                            if tool_name in CRITICAL_TOOLS:
+                            hitl_active = st.session_state.get("hitl_enabled", True)
+                            if hitl_active and (tool_name in CRITICAL_TOOLS):
                                 st.session_state.pending_action = {
                                     "tool_call_id": tool_call.id,
                                     "name": tool_name,
@@ -225,6 +226,19 @@ st.title("LM Studio MCP App")
 # Sidebar with user tools (clear chat/logs)
 with st.sidebar:
     st.header("Settings")
+
+    st.toggle(
+        "Wymagaj potwierdzeń (HITL)",
+        value=True,
+        key="hitl_enabled",
+        help="Gdy włączone, agent wymaga akceptacji przed wykonaniem operacji modyfikujących (zapis plików, commity, push).",
+        disabled=(st.session_state.get("pending_action") is not None)
+    )
+
+    if not st.session_state.get("hitl_enabled", True):
+        st.warning("Tryb autonomiczny: Agent wykonuje wszystkie operacje bez pytania o zgodę.")
+
+    st.divider()
 
     if st.button("Clear chat"):
         st.session_state.history = []
