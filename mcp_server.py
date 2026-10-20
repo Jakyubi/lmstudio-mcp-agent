@@ -27,6 +27,7 @@ TOOLS_MAP = {
     "get_current_datetime": tools.get_current_datetime,
     "list_directory": tools.list_directory,
     "read_file": tools.read_file,
+    "write_file": tools.write_file,
     "git_status": tools.git_status,
     "get_git_diff": tools.get_git_diff,
     "git_commit": tools.git_commit,
@@ -76,6 +77,26 @@ async def list_tools():
                     }
                 },
                 "required": ["file_path"]
+            }
+        ),
+        Tool(
+            name="write_file",
+            description="Creates a new file or completely overwrites an existing file with the specified content. "
+                        "When modifying an existing file, make sure you have read it first with read_file "
+                        "and provide the complete modified content here.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "file_path": {
+                        "type": "string",
+                        "description": "Path to the file to create or overwrite (e.g. 'main.py' or 'src/utils.py')."
+                    },
+                    "content": {
+                        "type": "string",
+                        "description": "The full text/code to be written into the file."
+                    }
+                },
+                "required": ["file_path", "content"]
             }
         ),
         Tool(

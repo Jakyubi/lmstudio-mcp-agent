@@ -54,6 +54,30 @@ def read_file(file_path: str):
     except Exception as e:
         return f"Error reading file: {str(e)}"
 
+def write_file(file_path: str, content: str):
+    """Creates a new file or overwrites an existing file with the provided content."""
+    logging.debug(f"write_file called for: {file_path}")
+    
+    if not file_path or not file_path.strip():
+        return "Error: File path cannot be empty."
+
+    try:
+        # Auto create missing folders
+        directory = os.path.dirname(file_path)
+        if directory and not os.path.exists(directory):
+            os.makedirs(directory, exist_ok=True)
+            logging.info(f"Created missing directory tree: {directory}")
+
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+
+        file_size = len(content.encode('utf-8'))
+        return f"--- File written successfully ---\nPath: {file_path}\nBytes written: {file_size}\n--- End ---"
+
+    except Exception as e:
+        logging.exception(f"Error writing to file {file_path}")
+        return f"Error writing file: {str(e)}"
+
 def git_status(repo_path: str = "."):
     """Returns the current status of the Git repository (short format)"""
     logging.debug("git_status called")
@@ -229,8 +253,6 @@ def git_commit(repo_path: str, message: str, files_to_add: str="."):
         return "Error: 'git' command not found. Check git installation."
     except Exception as e:
         return f"Error: {str(e)}"
-    
-
 
 def git_push(repo_path: str):
     """Pushes committed changes to the remote repository"""
