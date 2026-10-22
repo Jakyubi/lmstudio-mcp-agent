@@ -11,6 +11,7 @@ from starlette.responses import Response
 from starlette.routing import Mount, Route
 
 import tools
+from workspace import WorkspaceManager
 
 # Logging configuration
 logging.basicConfig(
@@ -207,8 +208,9 @@ async def call_tool(name: str, arguments: dict):
         logger.error(f"Requested unknown tool: {name}")
         raise ValueError(f"Unknown tool: {name}")
     try:
+        safe_args = WorkspaceManager.guard_arguments(arguments)
         handler = TOOLS_MAP[name]
-        result = handler(**arguments)
+        result = handler(**safe_args)
         logger.info(f"Tool {name} executed successfully.")
         logger.debug(f"Tool {name} result: {result}")
         return [TextContent(type="text", text=str(result))]

@@ -9,6 +9,8 @@ from mcp import ClientSession
 from mcp.client.sse import sse_client
 from openai import OpenAI
 
+from workspace import WorkspaceManager
+
 # Logging configuration
 logging.basicConfig(
     filename="app_debug.log",
@@ -18,7 +20,6 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
-
 
 load_dotenv()
 
@@ -251,6 +252,24 @@ st.title("LM Studio MCP App")
 # Sidebar with user tools (clear chat/logs)
 with st.sidebar:
     st.header("Settings")
+
+    current_ws = str(WorkspaceManager.get_workspace())
+    target_ws = st.text_input("Folder roboczy:", value=current_ws)
+
+    if st.button("Zastosuj folder", use_container_width=True):
+        try:
+            applied = WorkspaceManager.set_workspace(target_ws)
+            st.session_state.history = []
+            st.session_state.pending_action = None
+            st.success(f"Ustawiono: {applied.name}")
+            st.rerun()
+        except Exception as e:
+            st.error(f"Błąd: {e}")
+
+    st.caption("Aktualnie aktywna ścieżka:")
+    st.caption(current_ws)
+
+    st.divider()
 
     st.toggle(
         "Wymagaj potwierdzeń (HITL)",
