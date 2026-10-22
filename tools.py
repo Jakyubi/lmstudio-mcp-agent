@@ -15,7 +15,7 @@ def get_current_datetime():
 
 def list_directory(path: str):
     """Lists the contents of a specified directory"""
-    logging.debug("list_directory called")
+    logger.debug("list_directory called")
 
     if not os.path.exists(path):
         return f"Error: Path '{path}' does not exist."
@@ -40,7 +40,7 @@ def list_directory(path: str):
 
 def read_file(file_path: str):
     """Reads the content of text file."""
-    logging.debug("read_file called")
+    logger.debug("read_file called")
     if not os.path.exists(file_path):
         return f"Error: File '{file_path}' doesn't exist."
     if not os.path.isfile(file_path):
@@ -62,7 +62,7 @@ def read_file(file_path: str):
 
 def write_file(file_path: str, content: str):
     """Creates a new file or overwrites an existing file with the provided content."""
-    logging.debug(f"write_file called for: {file_path}")
+    logger.debug(f"write_file called for: {file_path}")
 
     if not file_path or not file_path.strip():
         return "Error: File path cannot be empty."
@@ -72,7 +72,7 @@ def write_file(file_path: str, content: str):
         directory = os.path.dirname(file_path)
         if directory and not os.path.exists(directory):
             os.makedirs(directory, exist_ok=True)
-            logging.info(f"Created missing directory tree: {directory}")
+            logger.info(f"Created missing directory tree: {directory}")
 
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(content)
@@ -81,13 +81,13 @@ def write_file(file_path: str, content: str):
         return f"--- File written successfully ---\nPath: {file_path}\nBytes written: {file_size}\n--- End ---"
 
     except Exception as e:
-        logging.exception(f"Error writing to file {file_path}")
+        logger.exception(f"Error writing to file {file_path}")
         return f"Error writing file: {str(e)}"
 
 
 def git_status(repo_path: str = "."):
     """Returns the current status of the Git repository (short format)"""
-    logging.debug("git_status called")
+    logger.debug("git_status called")
     if not os.path.exists(repo_path):
         return f"Error: Path '{repo_path}' does not exist."
     if not os.path.isdir(repo_path):
@@ -121,7 +121,7 @@ def git_status(repo_path: str = "."):
 
 def get_git_diff(repo_path: str = "."):
     """Returns the differences in uncommitted code (staged, unstaged, and untracked files) in a given repository"""
-    logging.debug("get_git_diff called")
+    logger.debug("get_git_diff called")
     if not os.path.exists(repo_path):
         return f"Error: Path '{repo_path}' does not exist."
     if not os.path.isdir(repo_path):
@@ -219,7 +219,7 @@ def get_git_diff(repo_path: str = "."):
 
 def git_commit(repo_path: str, message: str, files_to_add: str = "."):
     """Adds files to the staging area and creates a new commit"""
-    logging.debug("git_commit called")
+    logger.debug("git_commit called")
     if not os.path.exists(repo_path):
         return f"Error: Path '{repo_path}' does not exist."
     if not os.path.isdir(repo_path):
@@ -273,7 +273,7 @@ def git_commit(repo_path: str, message: str, files_to_add: str = "."):
 
 def git_push(repo_path: str):
     """Pushes committed changes to the remote repository"""
-    logging.debug("git_push called")
+    logger.debug("git_push called")
     if not os.path.exists(repo_path):
         return f"Error: Path '{repo_path}' does not exist."
     if not os.path.isdir(repo_path):
@@ -309,7 +309,7 @@ def git_push(repo_path: str):
 
 def git_pull(repo_path: str = "."):
     """Pulls changes from the remote repository safely"""
-    logging.debug("git_pull called")
+    logger.debug("git_pull called")
     if not os.path.exists(repo_path):
         return f"Error: Path '{repo_path}' does not exist."
     if not os.path.isdir(repo_path):
@@ -353,7 +353,7 @@ def git_pull(repo_path: str = "."):
 
 def git_undo_last_commit(repo_path: str = "."):
     """Undoes the last local commit while preserving all changes in the working directory (git reset HEAD~1)"""
-    logging.debug("git_undo_last_commit called")
+    logger.debug("git_undo_last_commit called")
     if not os.path.exists(repo_path) or not os.path.isdir(repo_path):
         return f"Error: Path '{repo_path}' is not a valid directory."
 

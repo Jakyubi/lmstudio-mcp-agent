@@ -20,6 +20,9 @@ logging.basicConfig(
     encoding="utf-8",
 )
 
+logger = logging.getLogger(__name__)
+
+
 server = Server("mcp-server")
 
 # Map linking tool names to functions from tools.py
@@ -197,20 +200,20 @@ async def list_tools():
 @server.call_tool()
 async def call_tool(name: str, arguments: dict):
     """Receives a tool execution request from the client, maps it, and executes the function"""
-    logging.info(f"\n\nReceived tool call request: {name}")
-    logging.debug(f"Arguments for {name}: {arguments}")
+    logger.info(f"\n\nReceived tool call request: {name}")
+    logger.debug(f"Arguments for {name}: {arguments}")
 
     if name not in TOOLS_MAP:
-        logging.error(f"Requested unknown tool: {name}")
+        logger.error(f"Requested unknown tool: {name}")
         raise ValueError(f"Unknown tool: {name}")
     try:
         handler = TOOLS_MAP[name]
         result = handler(**arguments)
-        logging.info(f"Tool {name} executed successfully.")
-        logging.debug(f"Tool {name} result: {result}")
+        logger.info(f"Tool {name} executed successfully.")
+        logger.debug(f"Tool {name} result: {result}")
         return [TextContent(type="text", text=str(result))]
     except Exception as e:
-        logging.exception(f"Error executing tool: {name}")
+        logger.exception(f"Error executing tool: {name}")
         return [TextContent(type="text", text=f"Tool Execution Error: {str(e)}")]
 
 
@@ -246,5 +249,5 @@ starlette_app = Starlette(
 )
 
 if __name__ == "__main__":
-    logging.info("Starting MCP server.")
+    logger.info("Starting MCP server.")
     uvicorn.run(starlette_app, host="127.0.0.1", port=8000)

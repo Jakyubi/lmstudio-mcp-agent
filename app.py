@@ -17,6 +17,9 @@ logging.basicConfig(
     encoding="utf-8",
 )
 
+logger = logging.getLogger(__name__)
+
+
 load_dotenv()
 
 # Read environment variables from the .env file to connect with LM Studio
@@ -55,10 +58,10 @@ async def ask_agent(user_input: str, messages_history: list):
         messages_history = []
 
     if user_input:
-        logging.info(f"\n\nNew user request: {user_input}")
+        logger.info(f"\n\nNew user request: {user_input}")
         messages_history.append({"role": "user", "content": user_input})
     else:
-        logging.info("Resuming agent loop after human intervention.")
+        logger.info("Resuming agent loop after human intervention.")
 
     server_url = "http://127.0.0.1:8000/sse"
 
@@ -83,7 +86,7 @@ async def ask_agent(user_input: str, messages_history: list):
         async with sse_client(server_url) as (read, write):
             async with ClientSession(read, write) as session:
                 await session.initialize()
-                logging.info("MCP session initialized.")
+                logger.info("MCP session initialized.")
 
                 # Fetch list of tools from MCP server and convert to OpenAI schema
                 tools_response = await session.list_tools()
@@ -94,7 +97,7 @@ async def ask_agent(user_input: str, messages_history: list):
 
                 # Main agent loop
                 for iteration in range(max_iterations):
-                    logging.info(f"Agent loop - iteration: {iteration + 1}")
+                    logger.info(f"Agent loop - iteration: {iteration + 1}")
                     system_prompt_msg = [
                         {"role": "system", "content": system_prompt}
                     ] + messages_history
@@ -111,7 +114,7 @@ async def ask_agent(user_input: str, messages_history: list):
                             )
                         except Exception as e:
                             error_msg = f"API Connection Error: Cannot connect to LLM, check LM Studio. ({str(e)})"
-                            logging.exception("Error connecting with LLM API.")
+                            logger.exception("Error connecting with LLM API.")
                             st.error(error_msg)
                             messages_history.append(
                                 {"role": "assistant", "content": error_msg}
@@ -122,7 +125,7 @@ async def ask_agent(user_input: str, messages_history: list):
 
                     # Check if model decided to use a tool
                     if msg.tool_calls:
-                        logging.info(
+                        logger.info(
                             f"Model decided to use {len(msg.tool_calls)} tool(s)."
                         )
                         messages_history.append(msg.model_dump())
@@ -130,14 +133,14 @@ async def ask_agent(user_input: str, messages_history: list):
                         for tool_call in msg.tool_calls:
                             tool_name = tool_call.function.name
                             tool_args_str = tool_call.function.arguments
-                            logging.info(
+                            logger.info(
                                 f"Calling tool: {tool_name} with arguments: {tool_args_str}"
                             )
                             try:
                                 tool_args = json.loads(tool_args_str)
                             except Exception as e:
                                 tool_args = {}
-                                logging.error(f"JSON decode error: {e}")
+                                logger.error(f"JSON decode error: {e}")
 
                             hitl_active = st.session_state.get("hitl_enabled", True)
                             if hitl_active and (tool_name in CRITICAL_TOOLS):
@@ -146,7 +149,7 @@ async def ask_agent(user_input: str, messages_history: list):
                                     "name": tool_name,
                                     "args": tool_args,
                                 }
-                                logging.info(
+                                logger.info(
                                     f"Action {tool_name} paused for user approval."
                                 )
                                 return
@@ -162,14 +165,14 @@ async def ask_agent(user_input: str, messages_history: list):
                                         tool_name, tool_args
                                     )
                                     result_text = result.content[0].text
-                                    logging.debug(
+                                    logger.debug(
                                         f"Server result for {tool_name}: {result_text}"
                                     )
                                     st.success("Completed")
                                     st.code(result_text)
                                 except Exception as e:
                                     result_text = f"Error using tool: {str(e)}"
-                                    logging.exception(
+                                    logger.exception(
                                         f"App error during communication with tool {tool_name}"
                                     )
                                     st.error(result_text)
@@ -190,7 +193,7 @@ async def ask_agent(user_input: str, messages_history: list):
 
                     # If model didn't call a tool, returns the final text response
                     else:
-                        logging.info("Model returned a text response. Ending loop.")
+                        logger.info("Model returned a text response. Ending loop.")
                         messages_history.append(
                             {"role": "assistant", "content": msg.content}
                         )
@@ -199,14 +202,14 @@ async def ask_agent(user_input: str, messages_history: list):
 
                 # Message when the loop hits the iteration limit
                 timeout_msg = "Task required too many steps to complete."
-                logging.warning("Maximum agent iterations exceeded.")
+                logger.warning("Maximum agent iterations exceeded.")
                 messages_history.append({"role": "assistant", "content": timeout_msg})
                 st.warning(timeout_msg)
     except Exception as e:
         error_msg = (
             f"MCP Server Error: Could not connect with mcp_server.py. ({str(e)})"
         )
-        logging.exception("Error initializing MCP session.")
+        logger.exception("Error initializing MCP session.")
         st.error(error_msg)
         messages_history.append({"role": "assistant", "content": error_msg})
 
