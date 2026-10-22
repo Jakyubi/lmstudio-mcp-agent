@@ -1,14 +1,14 @@
 import logging
+
+import uvicorn
+from mcp.server import NotificationOptions, Server
+from mcp.server.models import InitializationOptions
+from mcp.server.sse import SseServerTransport
+from mcp.types import TextContent, Tool
 from starlette.applications import Starlette
-from starlette.routing import Route, Mount
 from starlette.requests import Request
 from starlette.responses import Response
-import uvicorn
-
-from mcp.server.sse import SseServerTransport
-from mcp.server import Server, NotificationOptions
-from mcp.server.models import InitializationOptions
-from mcp.types import Tool, TextContent
+from starlette.routing import Mount, Route
 
 import tools
 
@@ -16,8 +16,8 @@ import tools
 logging.basicConfig(
     filename="mcp_server_debug.log",
     level=logging.DEBUG,
-    format='%(asctime)s - [MCP] - %(levelname)s - %(message)s',
-    encoding='utf-8'
+    format="%(asctime)s - [MCP] - %(levelname)s - %(message)s",
+    encoding="utf-8",
 )
 
 server = Server("mcp-server")
@@ -33,37 +33,35 @@ TOOLS_MAP = {
     "git_commit": tools.git_commit,
     "git_push": tools.git_push,
     "git_pull": tools.git_pull,
-    "git_undo_last_commit": tools.git_undo_last_commit
+    "git_undo_last_commit": tools.git_undo_last_commit,
 }
+
 
 @server.list_tools()
 async def list_tools():
     """Defines tool schemas (name, description, arguments)"""
-    return[
+    return [
         Tool(
             name="get_current_datetime",
             description="Returns current date and time.",
-            inputSchema={
-                "type": "object",
-                "properties": {}
-            }
+            inputSchema={"type": "object", "properties": {}},
         ),
         Tool(
             name="list_directory",
             description="Lists all files and subdirectories in a given path. This is your PRIMARY tool for exploring "
-                "the file system. Use this tool BEFORE assuming a file or folder exists. NEVER guess or "
-                "hallucinate directory names. If you are searching for something, start by listing the root "
-                "or parent directory to verify the actual structure.",
+            "the file system. Use this tool BEFORE assuming a file or folder exists. NEVER guess or "
+            "hallucinate directory names. If you are searching for something, start by listing the root "
+            "or parent directory to verify the actual structure.",
             inputSchema={
                 "type": "object",
                 "properties": {
                     "path": {
                         "type": "string",
-                        "description": "Path to a folder you want to check. Use '.' for current directory."
+                        "description": "Path to a folder you want to check. Use '.' for current directory.",
                     }
                 },
-                "required": ["path"]
-            }
+                "required": ["path"],
+            },
         ),
         Tool(
             name="read_file",
@@ -71,63 +69,63 @@ async def list_tools():
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "file_path":{
+                    "file_path": {
                         "type": "string",
-                        "description":"Exact path to a file you want to read."
+                        "description": "Exact path to a file you want to read.",
                     }
                 },
-                "required": ["file_path"]
-            }
+                "required": ["file_path"],
+            },
         ),
         Tool(
             name="write_file",
             description="Creates a new file or completely overwrites an existing file with the specified content. "
-                        "When modifying an existing file, make sure you have read it first with read_file "
-                        "and provide the complete modified content here.",
+            "When modifying an existing file, make sure you have read it first with read_file "
+            "and provide the complete modified content here.",
             inputSchema={
                 "type": "object",
                 "properties": {
                     "file_path": {
                         "type": "string",
-                        "description": "Path to the file to create or overwrite (e.g. 'main.py' or 'src/utils.py')."
+                        "description": "Path to the file to create or overwrite (e.g. 'main.py' or 'src/utils.py').",
                     },
                     "content": {
                         "type": "string",
-                        "description": "The full text/code to be written into the file."
-                    }
+                        "description": "The full text/code to be written into the file.",
+                    },
                 },
-                "required": ["file_path", "content"]
-            }
+                "required": ["file_path", "content"],
+            },
         ),
         Tool(
             name="git_status",
             description="Returns an overview of changes in the repository (modified, staged, untracked files). "
-                        "Use this tool FIRST when asked about repository state, commits, or code reviews to identify "
-                        "which files were modified before fetching a full diff.",
+            "Use this tool FIRST when asked about repository state, commits, or code reviews to identify "
+            "which files were modified before fetching a full diff.",
             inputSchema={
                 "type": "object",
                 "properties": {
                     "repo_path": {
                         "type": "string",
-                        "description": "Path to Git repository. Use '.' for current directory."
+                        "description": "Path to Git repository. Use '.' for current directory.",
                     }
                 },
-                "required": ["repo_path"]
-            }
+                "required": ["repo_path"],
+            },
         ),
         Tool(
             name="get_git_diff",
             description="Gets detailed code differences. Use this tool when a user asks to do a code review, check what they changed or find a bug in uncommitted code. The tool returns the exact code that was added or removed.",
             inputSchema={
                 "type": "object",
-                "properties":{
-                    "repo_path":{
+                "properties": {
+                    "repo_path": {
                         "type": "string",
-                        "description": "Path to Git repository."
+                        "description": "Path to Git repository.",
                     }
                 },
-                "required": ["repo_path"]
-            }
+                "required": ["repo_path"],
+            },
         ),
         Tool(
             name="git_commit",
@@ -135,35 +133,35 @@ async def list_tools():
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "repo_path":{
+                    "repo_path": {
                         "type": "string",
-                        "description": "Path to Git repository. Use '.' for current directory."
+                        "description": "Path to Git repository. Use '.' for current directory.",
                     },
-                    "message":{
+                    "message": {
                         "type": "string",
-                        "description": "The commit message explaining changes."
+                        "description": "The commit message explaining changes.",
                     },
-                    "files_to_add":{
-                        "type":"string",
-                        "description": "Space-separated list of files to stage before committing (e.g. 'file1.html file2.html') or '.' to stage all changes."
-                    }
+                    "files_to_add": {
+                        "type": "string",
+                        "description": "Space-separated list of files to stage before committing (e.g. 'file1.html file2.html') or '.' to stage all changes.",
+                    },
                 },
-                "required": ["repo_path", "message"]
-            }
+                "required": ["repo_path", "message"],
+            },
         ),
         Tool(
             name="git_push",
             description="Pushes committed local changes to the remote repository. Only use when user asks you to push changes to GitHub.",
             inputSchema={
                 "type": "object",
-                "properties":{
-                    "repo_path":{
+                "properties": {
+                    "repo_path": {
                         "type": "string",
-                        "description": "Path to Git repository."
+                        "description": "Path to Git repository.",
                     }
                 },
-                "required": ["repo_path"]
-            }
+                "required": ["repo_path"],
+            },
         ),
         Tool(
             name="git_pull",
@@ -173,12 +171,12 @@ async def list_tools():
                 "properties": {
                     "repo_path": {
                         "type": "string",
-                        "description": "Path to Git repository. Use '.' for current directory."
+                        "description": "Path to Git repository. Use '.' for current directory.",
                     }
                 },
-                "required": ["repo_path"]
-            }
-        ), 
+                "required": ["repo_path"],
+            },
+        ),
         Tool(
             name="git_undo_last_commit",
             description="Undoes the most recent local commit while keeping all changes in the files. Use this ONLY when the user explicitly requests to undo or revert the last commit.",
@@ -187,13 +185,14 @@ async def list_tools():
                 "properties": {
                     "repo_path": {
                         "type": "string",
-                        "description": "Path to Git repository. Use '.' for current directory."
+                        "description": "Path to Git repository. Use '.' for current directory.",
                     }
                 },
-                "required": ["repo_path"]
-            }
+                "required": ["repo_path"],
+            },
         ),
     ]
+
 
 @server.call_tool()
 async def call_tool(name: str, arguments: dict):
@@ -217,11 +216,13 @@ async def call_tool(name: str, arguments: dict):
 
 sse = SseServerTransport("/messages/")
 
+
 async def handle_sse(request: Request):
     """Handles SSE stream connection"""
-    async with sse.connect_sse(
-        request.scope, request.receive, request._send
-    ) as (read_stream, write_stream):
+    async with sse.connect_sse(request.scope, request.receive, request._send) as (
+        read_stream,
+        write_stream,
+    ):
         await server.run(
             read_stream,
             write_stream,
@@ -230,11 +231,12 @@ async def handle_sse(request: Request):
                 server_version="1.0.0",
                 capabilities=server.get_capabilities(
                     notification_options=NotificationOptions(),
-                    experimental_capabilities={}
-                )
-            )
+                    experimental_capabilities={},
+                ),
+            ),
         )
     return Response()
+
 
 starlette_app = Starlette(
     routes=[
