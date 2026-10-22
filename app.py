@@ -65,7 +65,7 @@ async def ask_agent(user_input: str, messages_history: list):
 
     server_url = "http://127.0.0.1:8000/sse"
 
-    system_prompt = f"""
+    system_prompt = """
     You are an autonomous, Action-First AI assistant. Your primary goal is to fully resolve the user's request end-to-end using the tools available to you.
 
     CRITICAL RULES OF OPERATION:
@@ -83,132 +83,126 @@ async def ask_agent(user_input: str, messages_history: list):
     """
     try:
         # Start MCP client communicationg with server
-        async with sse_client(server_url) as (read, write):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                logger.info("MCP session initialized.")
+        async with (
+            sse_client(server_url) as (read, write),
+            ClientSession(read, write) as session,
+        ):
+            await session.initialize()
+            logger.info("MCP session initialized.")
 
-                # Fetch list of tools from MCP server and convert to OpenAI schema
-                tools_response = await session.list_tools()
-                openai_tools = convert_tools(tools_response.tools)
+            # Fetch list of tools from MCP server and convert to OpenAI schema
+            tools_response = await session.list_tools()
+            openai_tools = convert_tools(tools_response.tools)
 
-                # Agent loop iteration limit
-                max_iterations = 10
+            # Agent loop iteration limit
+            max_iterations = 10
 
-                # Main agent loop
-                for iteration in range(max_iterations):
-                    logger.info(f"Agent loop - iteration: {iteration + 1}")
-                    system_prompt_msg = [
-                        {"role": "system", "content": system_prompt}
-                    ] + messages_history
+            # Main agent loop
+            for iteration in range(max_iterations):
+                logger.info(f"Agent loop - iteration: {iteration + 1}")
+                system_prompt_msg = [
+                    {"role": "system", "content": system_prompt}
+                ] + messages_history
 
-                    with st.spinner("LLM: Awaiting inference..."):
-                        try:
-                            # Request to the LLM with full history and list of available tools
-                            response = client.chat.completions.create(
-                                model="local-model",
-                                messages=system_prompt_msg,
-                                tools=openai_tools,
-                                temperature=0.2,
-                                parallel_tool_calls=False,
-                            )
-                        except Exception as e:
-                            error_msg = f"API Connection Error: Cannot connect to LLM, check LM Studio. ({str(e)})"
-                            logger.exception("Error connecting with LLM API.")
-                            st.error(error_msg)
-                            messages_history.append(
-                                {"role": "assistant", "content": error_msg}
-                            )
-                            return
-
-                    msg = response.choices[0].message
-
-                    # Check if model decided to use a tool
-                    if msg.tool_calls:
-                        logger.info(
-                            f"Model decided to use {len(msg.tool_calls)} tool(s)."
+                with st.spinner("LLM: Awaiting inference..."):
+                    try:
+                        # Request to the LLM with full history and list of available tools
+                        response = client.chat.completions.create(
+                            model="local-model",
+                            messages=system_prompt_msg,
+                            tools=openai_tools,
+                            temperature=0.2,
+                            parallel_tool_calls=False,
                         )
-                        messages_history.append(msg.model_dump())
-
-                        for tool_call in msg.tool_calls:
-                            tool_name = tool_call.function.name
-                            tool_args_str = tool_call.function.arguments
-                            logger.info(
-                                f"Calling tool: {tool_name} with arguments: {tool_args_str}"
-                            )
-                            try:
-                                tool_args = json.loads(tool_args_str)
-                            except Exception as e:
-                                tool_args = {}
-                                logger.error(f"JSON decode error: {e}")
-
-                            hitl_active = st.session_state.get("hitl_enabled", True)
-                            if hitl_active and (tool_name in CRITICAL_TOOLS):
-                                st.session_state.pending_action = {
-                                    "tool_call_id": tool_call.id,
-                                    "name": tool_name,
-                                    "args": tool_args,
-                                }
-                                logger.info(
-                                    f"Action {tool_name} paused for user approval."
-                                )
-                                return
-
-                            with st.status(
-                                f"Running tool: {tool_name}", expanded=True
-                            ) as status:
-                                st.write(f"Arguments: `{tool_args_str}`")
-
-                                try:
-                                    # Parse arguments generated by LLM and send to MCP server
-                                    result = await session.call_tool(
-                                        tool_name, tool_args
-                                    )
-                                    result_text = result.content[0].text
-                                    logger.debug(
-                                        f"Server result for {tool_name}: {result_text}"
-                                    )
-                                    st.success("Completed")
-                                    st.code(result_text)
-                                except Exception as e:
-                                    result_text = f"Error using tool: {str(e)}"
-                                    logger.exception(
-                                        f"App error during communication with tool {tool_name}"
-                                    )
-                                    st.error(result_text)
-
-                                status.update(state="complete")
-
-                            # Save tool's result to the history so model sees it in next loop iteration
-                            messages_history.append(
-                                {
-                                    "tool_call_id": tool_call.id,
-                                    "role": "tool",
-                                    "name": tool_call.function.name,
-                                    "content": result_text,
-                                }
-                            )
-                        # Return to the beggining of the 'for' loop, the LLM analyzes the history again with the tool's result
-                        continue
-
-                    # If model didn't call a tool, returns the final text response
-                    else:
-                        logger.info("Model returned a text response. Ending loop.")
+                    except Exception as e:
+                        error_msg = f"API Connection Error: Cannot connect to LLM, check LM Studio. ({e})"
+                        logger.exception("Error connecting with LLM API.")
+                        st.error(error_msg)
                         messages_history.append(
-                            {"role": "assistant", "content": msg.content}
+                            {"role": "assistant", "content": error_msg}
                         )
-                        st.markdown(msg.content)
                         return
 
-                # Message when the loop hits the iteration limit
-                timeout_msg = "Task required too many steps to complete."
-                logger.warning("Maximum agent iterations exceeded.")
-                messages_history.append({"role": "assistant", "content": timeout_msg})
-                st.warning(timeout_msg)
+                msg = response.choices[0].message
+
+                # Check if model decided to use a tool
+                if msg.tool_calls:
+                    logger.info(f"Model decided to use {len(msg.tool_calls)} tool(s).")
+                    messages_history.append(msg.model_dump())
+
+                    for tool_call in msg.tool_calls:
+                        tool_name = tool_call.function.name
+                        tool_args_str = tool_call.function.arguments
+                        logger.info(
+                            f"Calling tool: {tool_name} with arguments: {tool_args_str}"
+                        )
+                        try:
+                            tool_args = json.loads(tool_args_str)
+                        except Exception as e:
+                            tool_args = {}
+                            logger.error(f"JSON decode error: {e}")
+
+                        hitl_active = st.session_state.get("hitl_enabled", True)
+                        if hitl_active and (tool_name in CRITICAL_TOOLS):
+                            st.session_state.pending_action = {
+                                "tool_call_id": tool_call.id,
+                                "name": tool_name,
+                                "args": tool_args,
+                            }
+                            logger.info(f"Action {tool_name} paused for user approval.")
+                            return
+
+                        with st.status(
+                            f"Running tool: {tool_name}", expanded=True
+                        ) as status:
+                            st.write(f"Arguments: `{tool_args_str}`")
+
+                            try:
+                                # Parse arguments generated by LLM and send to MCP server
+                                result = await session.call_tool(tool_name, tool_args)
+                                result_text = result.content[0].text
+                                logger.debug(
+                                    f"Server result for {tool_name}: {result_text}"
+                                )
+                                st.success("Completed")
+                                st.code(result_text)
+                            except Exception as e:
+                                result_text = f"Error using tool: {e}"
+                                logger.exception(
+                                    f"App error during communication with tool {tool_name}"
+                                )
+                                st.error(result_text)
+
+                            status.update(state="complete")
+
+                        # Save tool's result to the history so model sees it in next loop iteration
+                        messages_history.append(
+                            {
+                                "tool_call_id": tool_call.id,
+                                "role": "tool",
+                                "name": tool_call.function.name,
+                                "content": result_text,
+                            }
+                        )
+                    # Return to the beggining of the 'for' loop, the LLM analyzes the history again with the tool's result
+                    continue
+
+                # If model didn't call a tool, returns the final text response
+                else:
+                    logger.info("Model returned a text response. Ending loop.")
+                    messages_history.append(
+                        {"role": "assistant", "content": msg.content}
+                    )
+                    st.markdown(msg.content)
+                    return
+
+            # Message when the loop hits the iteration limit
+            timeout_msg = "Task required too many steps to complete."
+            logger.warning("Maximum agent iterations exceeded.")
+            messages_history.append({"role": "assistant", "content": timeout_msg})
+            st.warning(timeout_msg)
     except Exception as e:
-        error_msg = (
-            f"MCP Server Error: Could not connect with mcp_server.py. ({str(e)})"
-        )
+        error_msg = f"MCP Server Error: Could not connect with mcp_server.py. ({e})"
         logger.exception("Error initializing MCP session.")
         st.error(error_msg)
         messages_history.append({"role": "assistant", "content": error_msg})
@@ -224,13 +218,15 @@ async def handle_pending_action(approved: bool):
 
     if approved:
         try:
-            async with sse_client(server_url) as (read, write):
-                async with ClientSession(read, write) as session:
-                    await session.initialize()
-                    result = await session.call_tool(action["name"], action["args"])
-                    result_text = result.content[0].text
+            async with (
+                sse_client(server_url) as (read, write),
+                ClientSession(read, write) as session,
+            ):
+                await session.initialize()
+                result = await session.call_tool(action["name"], action["args"])
+                result_text = result.content[0].text
         except Exception as e:
-            result_text = f"Tool Execution Error: {str(e)}"
+            result_text = f"Tool Execution Error: {e}"
     else:
         result_text = "Operation CANCELLED by the user. Do not attempt this exact action again; propose an alternative or ask the user."
 
@@ -368,8 +364,7 @@ if prompt:
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    with st.chat_message("assistant"):
-        with st.spinner("Executing task workflow..."):
-            asyncio.run(ask_agent(prompt, st.session_state.history))
+    with st.chat_message("assistant"), st.spinner("Executing task workflow..."):
+        asyncio.run(ask_agent(prompt, st.session_state.history))
 
     st.rerun()

@@ -214,7 +214,7 @@ async def call_tool(name: str, arguments: dict):
         return [TextContent(type="text", text=str(result))]
     except Exception as e:
         logger.exception(f"Error executing tool: {name}")
-        return [TextContent(type="text", text=f"Tool Execution Error: {str(e)}")]
+        return [TextContent(type="text", text=f"Tool Execution Error: {e}")]
 
 
 sse = SseServerTransport("/messages/")

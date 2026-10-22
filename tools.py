@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 def get_current_datetime():
     """Returns current date and time"""
-    logging.debug("get_current_datetime called")
+    logger.debug("get_current_datetime called")
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
@@ -35,7 +35,7 @@ def list_directory(path: str):
 
         return "\n".join(result)
     except Exception as e:
-        return f"Error reading folder: {str(e)}"
+        return f"Error reading folder: {e}"
 
 
 def read_file(file_path: str):
@@ -57,7 +57,7 @@ def read_file(file_path: str):
     except UnicodeDecodeError:
         return f"Error: File '{file_path}' is probably a binary file, not text file."
     except Exception as e:
-        return f"Error reading file: {str(e)}"
+        return f"Error reading file: {e}"
 
 
 def write_file(file_path: str, content: str):
@@ -82,7 +82,7 @@ def write_file(file_path: str, content: str):
 
     except Exception as e:
         logger.exception(f"Error writing to file {file_path}")
-        return f"Error writing file: {str(e)}"
+        return f"Error writing file: {e}"
 
 
 def git_status(repo_path: str = "."):
@@ -116,7 +116,7 @@ def git_status(repo_path: str = "."):
     except FileNotFoundError:
         return "Error: 'git' command not found. Check git installation."
     except Exception as e:
-        return f"Error: {str(e)}"
+        return f"Error: {e}"
 
 
 def get_git_diff(repo_path: str = "."):
@@ -139,6 +139,7 @@ def get_git_diff(repo_path: str = "."):
                 text=True,
                 stdin=subprocess.DEVNULL,
                 timeout=5,
+                check=False,
             ).returncode
             == 0
         )
@@ -194,6 +195,7 @@ def get_git_diff(repo_path: str = "."):
                 text=True,
                 stdin=subprocess.DEVNULL,
                 timeout=5,
+                check=False,
             )
             if diff_new.stdout.strip():
                 diff_parts.append(diff_new.stdout.strip())
@@ -214,7 +216,7 @@ def get_git_diff(repo_path: str = "."):
     except FileNotFoundError:
         return "Error: 'git' command not found. Check git installation."
     except Exception as e:
-        return f"Error: {str(e)}"
+        return f"Error: {e}"
 
 
 def git_commit(repo_path: str, message: str, files_to_add: str = "."):
@@ -268,7 +270,7 @@ def git_commit(repo_path: str, message: str, files_to_add: str = "."):
     except FileNotFoundError:
         return "Error: 'git' command not found. Check git installation."
     except Exception as e:
-        return f"Error: {str(e)}"
+        return f"Error: {e}"
 
 
 def git_push(repo_path: str):
@@ -304,7 +306,7 @@ def git_push(repo_path: str):
     except FileNotFoundError:
         return "Error: 'git' command not found. Check git installation."
     except Exception as e:
-        return f"Error: {str(e)}"
+        return f"Error: {e}"
 
 
 def git_pull(repo_path: str = "."):
@@ -338,6 +340,7 @@ def git_pull(repo_path: str = "."):
                 cwd=repo_path,
                 capture_output=True,
                 stdin=subprocess.DEVNULL,
+                check=False,
             )
             return (
                 f"Conflict detected during git pull! Merge was automatically aborted to preserve repository state. "
@@ -348,7 +351,7 @@ def git_pull(repo_path: str = "."):
     except subprocess.TimeoutExpired:
         return "Error: Git pull exceeded time limit."
     except Exception as e:
-        return f"Error: {str(e)}"
+        return f"Error: {e}"
 
 
 def git_undo_last_commit(repo_path: str = "."):
@@ -372,4 +375,4 @@ def git_undo_last_commit(repo_path: str = "."):
     except subprocess.CalledProcessError as e:
         return f"Git error: {e.stderr.strip() or e.stdout.strip()}"
     except Exception as e:
-        return f"Error: {str(e)}"
+        return f"Error: {e}"
