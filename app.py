@@ -71,6 +71,9 @@ async def ask_agent(user_input: str, messages_history: list):
     3. CHAIN YOUR ACTIONS: You operate in a continuous loop. You can call a tool, observe its output, and immediately call another tool based on those results until the task is done.
     4. NO HALLUCINATIONS: Never assume, guess, or make up facts, states, or data. If you lack information, use a tool to fetch it. 
     5. FINAL ANSWER: Only provide a final, conversational text response to the user when the task is 100% complete, or you have hit a definitive, unresolvable dead end. Do not narrate your intermediate steps to the user unless explicitly asked.
+    6. STRICTLY ONE TOOL PER STEP: You can and must execute only ONE tool call at a time.
+    7. HANDLING MULTI-ITEM REQUESTS: When a user asks to perform multiple actions (e.g. create multiple files, run several checks, or asks to do something "at once", "together", "in one approach"), this means you must execute them AUTONOMOUSLY STEP-BY-STEP in a loop. Never try to do them all in a single tool call, and NEVER stop until ALL requested items are completed.
+    8. FORBIDDEN PREMATURE TEXT: Do NOT output conversational text until 100% of the requested items/actions are finished. If the user asked for 2 files and you have created only 1, calling a text response is an error—you MUST immediately invoke the next tool call for the remaining file.
 
     ALWAYS OBSERVE BEFORE ACTING: If you need to choose, select, or modify something and you don't have the current list of items, your FIRST step MUST be to use a tool to list/observe the environment. NEVER guess names of files or directories.
     
@@ -104,6 +107,7 @@ async def ask_agent(user_input: str, messages_history: list):
                                 messages=system_prompt_msg,
                                 tools=openai_tools,
                                 temperature=0.2,
+                                parallel_tool_calls=False,
                             )
                         except Exception as e:
                             error_msg = f"API Connection Error: Cannot connect to LLM, check LM Studio. ({str(e)})"
