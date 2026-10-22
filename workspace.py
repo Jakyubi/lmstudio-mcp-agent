@@ -72,7 +72,4 @@ class WorkspaceManager:
 
                 sanitized[key] = str(resolved)
 
-        if "repo_path" not in sanitized:
-            sanitized["repo_path"] = str(current_ws)
-
         return sanitized
