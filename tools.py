@@ -67,6 +67,9 @@ def write_file(file_path: str, content: str):
     if not file_path or not file_path.strip():
         return "Error: File path cannot be empty."
 
+    if os.path.isdir(file_path):
+        return f"Error: Path '{file_path}' is an existing directory, not a file."
+
     try:
         # Auto create missing folders
         directory = os.path.dirname(file_path)
@@ -238,9 +241,13 @@ def git_commit(repo_path: str, message: str, files_to_add: str = "."):
             except ValueError:
                 targets = raw_files.split()
 
+        for t in targets:
+            if t.startswith("-"):
+                return f"Error: Flag '{t}' is not allowed in file targets."
+
         # Phase 1: git add
         subprocess.run(
-            ["git", "add"] + targets,
+            ["git", "add", "--"] + targets,
             cwd=repo_path,
             capture_output=True,
             text=True,

@@ -1,4 +1,6 @@
 import logging
+import os
+import shlex
 from pathlib import Path
 
 STATE_FILE = Path(".workspace")
@@ -48,28 +50,42 @@ class WorkspaceManager:
 
         for key in cls.PATH_KEYS:
             if key in sanitized:
-                raw_val = sanitized[key]
-                raw_path = Path(str(raw_val).strip() if raw_val else ".")
-
-                resolved = (
-                    (current_ws / raw_path).resolve()
-                    if not raw_path.is_absolute()
-                    else raw_path.resolve()
+                allow_empty = key in {"path", "repo_path"}
+                resolved = cls._verify_path(
+                    current_ws, sanitized[key], allow_empty=allow_empty
                 )
-
-                try:
-                    resolved.relative_to(current_ws)
-                except ValueError:
-                    raise PermissionError(
-                        f"Access Denied: Path '{raw_val}' tries to go out of: {current_ws}"
-                    )
-
-                git_dir = current_ws / ".git"
-                if resolved == git_dir or git_dir in resolved.parents:
-                    raise PermissionError(
-                        "Access Denied: Direct access to .git is prohibited."
-                    )
-
                 sanitized[key] = str(resolved)
+
+        if "files_to_add" in sanitized and sanitized["files_to_add"] is not None:
+            raw_files = str(sanitized["files_to_add"]).strip()
+            if not raw_files or raw_files == ".":
+                sanitized["files_to_add"] = "."
+            else:
+                try:
+                    targets = shlex.split(raw_files, posix=(os.name != "nt"))
+                    targets = [t.strip("\"'") for t in targets if t.strip()]
+                except ValueError:
+                    targets = raw_files.split()
+
+                cleaned_targets = []
+                for target in targets:
+                    if target.startswith("-"):
+                        raise ValueError(
+                            f"Access Denied: Flag '{target}' is not allowed in file paths."
+                        )
+
+                    if target == ".":
+                        cleaned_targets.append(".")
+                        continue
+
+                    resolved_target = cls._verify_path(
+                        current_ws, target, allow_empty=False
+                    )
+                    rel_target = resolved_target.relative_to(current_ws)
+                    cleaned_targets.append(str(rel_target).replace("\\", "/"))
+
+                sanitized["files_to_add"] = (
+                    " ".join(cleaned_targets) if cleaned_targets else "."
+                )
 
         return sanitized
