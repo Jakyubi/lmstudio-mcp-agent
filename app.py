@@ -90,6 +90,7 @@ def ask_agent(user_input: str, messages_history: list):
     8. FORBIDDEN PREMATURE TEXT: Do NOT output conversational text until 100% of the requested items/actions are finished. If the user asked for 2 files and you have created only 1, calling a text response is an error—you MUST immediately invoke the next tool call for the remaining file.
 
     ALWAYS OBSERVE BEFORE ACTING: If you need to choose, select, or modify something and you don't have the current list of items, your FIRST step MUST be to use a tool to list/observe the environment. NEVER guess names of files or directories.
+    /no_think
     """
 
     # Agent loop iteration limit
@@ -125,10 +126,15 @@ def ask_agent(user_input: str, messages_history: list):
         if msg.tool_calls:
             logger.info(f"Model decided to use {len(msg.tool_calls)} tool(s).")
 
-            # Zgodnie z regułą nr 6 procesujemy pierwsze wywołanie narzędzia
             tool_call = msg.tool_calls[0]
             tool_name = tool_call.function.name
             tool_args_str = tool_call.function.arguments
+
+            sanitized_assistant_msg = {
+                "role": "assistant",
+                "content": msg.content,
+                "tool_calls": [tool_call.model_dump()],
+            }
 
             logger.info(f"Calling tool: {tool_name} with arguments: {tool_args_str}")
             try:
@@ -143,12 +149,12 @@ def ask_agent(user_input: str, messages_history: list):
                     "tool_call_id": tool_call.id,
                     "name": tool_name,
                     "args": tool_args,
-                    "raw_msg": msg.model_dump(),
+                    "raw_msg": sanitized_assistant_msg,
                 }
                 logger.info(f"Action {tool_name} paused for user approval.")
                 return
 
-            messages_history.append(msg.model_dump())
+            messages_history.append(sanitized_assistant_msg)
 
             with st.status(f"Running tool: {tool_name}", expanded=True) as status:
                 st.write(f"Arguments: `{tool_args_str}`")
