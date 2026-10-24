@@ -224,8 +224,7 @@ def handle_pending_action(approved: bool):
     )
 
     st.session_state.pending_action = None
-
-    ask_agent(None, st.session_state.history)
+    st.session_state.resume_agent = True
 
 
 st.set_page_config(page_title="LM Studio MCP App")
@@ -292,6 +291,9 @@ if "history" not in st.session_state:
 if "pending_action" not in st.session_state:
     st.session_state.pending_action = None
 
+if "resume_agent" not in st.session_state:
+    st.session_state.resume_agent = False
+
 # Render message history in the UI
 for msg in st.session_state.history:
     role = msg.get("role")
@@ -340,13 +342,11 @@ if st.session_state.pending_action:
             if st.button(
                 "Zatwierdź i wykonaj", type="primary", use_container_width=True
             ):
-                with st.spinner("Wykonywanie operacji..."):
-                    handle_pending_action(approved=True)
+                handle_pending_action(approved=True)
                 st.rerun()
         with col2:
             if st.button("Odrzuć operację", use_container_width=True):
-                with st.spinner("Odrzucanie operacji..."):
-                    handle_pending_action(approved=False)
+                handle_pending_action(approved=False)
                 st.rerun()
 
 
@@ -358,13 +358,20 @@ prompt_placeholder = (
     else "Wpisz polecenie dla asystenta..."
 )
 
+
+if st.session_state.resume_agent:
+    st.session_state.resume_agent = False
+    with st.chat_message("assistant"):
+        ask_agent(None, st.session_state.history)
+    st.rerun()
+
 prompt = st.chat_input(prompt_placeholder, disabled=is_waiting_for_approval)
 
 if prompt:
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    with st.chat_message("assistant"), st.spinner("Executing task workflow..."):
+    with st.chat_message("assistant"):
         ask_agent(prompt, st.session_state.history)
 
     st.rerun()
