@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 import uvicorn
@@ -210,7 +211,8 @@ async def call_tool(name: str, arguments: dict):
     try:
         safe_args = WorkspaceManager.guard_arguments(arguments)
         handler = TOOLS_MAP[name]
-        result = handler(**safe_args)
+        result = await asyncio.to_thread(handler, **safe_args)
+
         logger.info(f"Tool {name} executed successfully.")
         logger.debug(f"Tool {name} result: {result}")
         return [TextContent(type="text", text=str(result))]
