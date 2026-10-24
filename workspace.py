@@ -40,6 +40,41 @@ class WorkspaceManager:
         return target
 
     @classmethod
+    def _verify_path(
+        cls, current_ws: Path, raw_val: any, allow_empty: bool = False
+    ) -> Path:
+        """
+        Weryfikuje i rozwiązuje pojedynczą ścieżkę.
+        Chroni przed Path Traversal oraz bezpośrednim dostępem do .git.
+        """
+        raw_str = str(raw_val).strip() if raw_val is not None else ""
+
+        if not raw_str:
+            if allow_empty:
+                return current_ws
+            raise ValueError("Ścieżka nie może być pusta.")
+
+        raw_path = Path(raw_str)
+        resolved = (
+            (current_ws / raw_path).resolve()
+            if not raw_path.is_absolute()
+            else raw_path.resolve()
+        )
+
+        try:
+            resolved.relative_to(current_ws)
+        except ValueError:
+            raise PermissionError(
+                f"Access Denied: Path '{raw_str}' tries to go out of: {current_ws}"
+            )
+
+        git_dir = current_ws / ".git"
+        if resolved == git_dir or git_dir in resolved.parents:
+            raise PermissionError("Access Denied: Direct access to .git is prohibited.")
+
+        return resolved
+
+    @classmethod
     def guard_arguments(cls, arguments: dict) -> dict:
         """
         Verifies tool arguments
