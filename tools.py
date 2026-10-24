@@ -7,6 +7,12 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 
+class ToolExecutionError(Exception):
+    """Wyjątek rzucany w przypadku kontrolowanego błędu wykonania narzędzia."""
+
+    pass
+
+
 def get_current_datetime():
     """Returns current date and time"""
     logger.debug("get_current_datetime called")
@@ -18,9 +24,9 @@ def list_directory(path: str):
     logger.debug("list_directory called")
 
     if not os.path.exists(path):
-        return f"Error: Path '{path}' does not exist."
+        raise ToolExecutionError(f"Path '{path}' does not exist.")
     if not os.path.isdir(path):
-        return f"Error: Path '{path}' is not a folder."
+        raise ToolExecutionError(f"Path '{path}' is not a folder.")
 
     try:
         items = os.listdir(path)
@@ -35,16 +41,16 @@ def list_directory(path: str):
 
         return "\n".join(result)
     except Exception as e:
-        return f"Error reading folder: {e}"
+        raise ToolExecutionError(f"Error reading folder: {e}")
 
 
 def read_file(file_path: str):
     """Reads the content of text file."""
     logger.debug("read_file called")
     if not os.path.exists(file_path):
-        return f"Error: File '{file_path}' doesn't exist."
+        raise ToolExecutionError(f"File '{file_path}' doesn't exist.")
     if not os.path.isfile(file_path):
-        return f"Error: Path '{file_path}' is not a file."
+        raise ToolExecutionError(f"Path '{file_path}' is not a file.")
 
     try:
         with open(file_path, "r", encoding="utf-8") as f:
@@ -55,9 +61,11 @@ def read_file(file_path: str):
                 f"--- Beginning of file {file_path} ---\n{content}\n--- End of file ---"
             )
     except UnicodeDecodeError:
-        return f"Error: File '{file_path}' is probably a binary file, not text file."
+        raise ToolExecutionError(
+            f"File '{file_path}' is probably a binary file, not text file."
+        )
     except Exception as e:
-        return f"Error reading file: {e}"
+        raise ToolExecutionError(f"Error reading file: {e}")
 
 
 def write_file(file_path: str, content: str):
@@ -65,10 +73,12 @@ def write_file(file_path: str, content: str):
     logger.debug(f"write_file called for: {file_path}")
 
     if not file_path or not file_path.strip():
-        return "Error: File path cannot be empty."
+        raise ToolExecutionError("File path cannot be empty.")
 
     if os.path.isdir(file_path):
-        return f"Error: Path '{file_path}' is an existing directory, not a file."
+        raise ToolExecutionError(
+            f"Error: Path '{file_path}' is an existing directory, not a file."
+        )
 
     try:
         # Auto create missing folders
@@ -85,16 +95,16 @@ def write_file(file_path: str, content: str):
 
     except Exception as e:
         logger.exception(f"Error writing to file {file_path}")
-        return f"Error writing file: {e}"
+        raise ToolExecutionError(f"Error writing file: {e}")
 
 
 def git_status(repo_path: str = "."):
     """Returns the current status of the Git repository (short format)"""
     logger.debug("git_status called")
     if not os.path.exists(repo_path):
-        return f"Error: Path '{repo_path}' does not exist."
+        raise ToolExecutionError(f"Path '{repo_path}' does not exist.")
     if not os.path.isdir(repo_path):
-        return f"Error: Path '{repo_path}' is not a folder."
+        raise ToolExecutionError(f"Path '{repo_path}' is not a folder.")
 
     try:
         result = subprocess.run(
@@ -112,23 +122,23 @@ def git_status(repo_path: str = "."):
         return f"--- Git status for {repo_path} ---\n{output}\n--- End ---"
 
     except subprocess.TimeoutExpired:
-        return "Error: Git status exceeded time limit."
+        raise ToolExecutionError("Git status exceeded time limit.")
     except subprocess.CalledProcessError as e:
         output = e.stdout.strip() if e.stdout else e.stderr.strip()
-        return f"Git error: {output}"
+        raise ToolExecutionError(f"Git error: {output}")
     except FileNotFoundError:
-        return "Error: 'git' command not found. Check git installation."
+        raise ToolExecutionError("'git' command not found. Check git installation.")
     except Exception as e:
-        return f"Error: {e}"
+        raise ToolExecutionError(str(e))
 
 
 def get_git_diff(repo_path: str = "."):
     """Returns the differences in uncommitted code (staged, unstaged, and untracked files) in a given repository"""
     logger.debug("get_git_diff called")
     if not os.path.exists(repo_path):
-        return f"Error: Path '{repo_path}' does not exist."
+        raise ToolExecutionError(f"Path '{repo_path}' does not exist.")
     if not os.path.isdir(repo_path):
-        return f"Error: Path '{repo_path}' is not a folder."
+        raise ToolExecutionError(f"Path '{repo_path}' is not a folder.")
 
     try:
         diff_parts = []
@@ -212,23 +222,23 @@ def get_git_diff(repo_path: str = "."):
         return f"--- Result of git diff for {repo_path} ---\n{full_diff}\n--- End ---"
 
     except subprocess.TimeoutExpired:
-        return "Error: Git Diff exceeded time limit."
+        raise ToolExecutionError("Git Diff exceeded time limit.")
     except subprocess.CalledProcessError as e:
         err = e.stderr.strip() if e.stderr else str(e)
-        return f"Git error: {err}"
+        raise ToolExecutionError(f"Git error: {err}")
     except FileNotFoundError:
-        return "Error: 'git' command not found. Check git installation."
+        raise ToolExecutionError("'git' command not found. Check git installation.")
     except Exception as e:
-        return f"Error: {e}"
+        raise ToolExecutionError(str(e))
 
 
 def git_commit(repo_path: str, message: str, files_to_add: str = "."):
     """Adds files to the staging area and creates a new commit"""
     logger.debug("git_commit called")
     if not os.path.exists(repo_path):
-        return f"Error: Path '{repo_path}' does not exist."
+        raise ToolExecutionError(f"Path '{repo_path}' does not exist.")
     if not os.path.isdir(repo_path):
-        return f"Error: Path '{repo_path}' is not a folder."
+        raise ToolExecutionError(f"Path '{repo_path}' is not a folder.")
 
     try:
         raw_files = files_to_add.strip() if files_to_add else "."
@@ -270,23 +280,23 @@ def git_commit(repo_path: str, message: str, files_to_add: str = "."):
         return f"--- Commit successful ---\n{commit_result.stdout.strip()}\n--- End ---"
 
     except subprocess.TimeoutExpired:
-        return "Error: Git operations exceeded time limit."
+        raise ToolExecutionError("Git operations exceeded time limit.")
     except subprocess.CalledProcessError as e:
         output = e.stdout.strip() if e.stdout else e.stderr.strip()
-        return f"Git error: {output}"
+        raise ToolExecutionError(f"Git error: {output}")
     except FileNotFoundError:
-        return "Error: 'git' command not found. Check git installation."
+        raise ToolExecutionError("'git' command not found. Check git installation.")
     except Exception as e:
-        return f"Error: {e}"
+        raise ToolExecutionError(str(e))
 
 
 def git_push(repo_path: str):
     """Pushes committed changes to the remote repository"""
     logger.debug("git_push called")
     if not os.path.exists(repo_path):
-        return f"Error: Path '{repo_path}' does not exist."
+        raise ToolExecutionError(f"Path '{repo_path}' does not exist.")
     if not os.path.isdir(repo_path):
-        return f"Error: Path '{repo_path}' is not a folder."
+        raise ToolExecutionError(f"Path '{repo_path}' is not a folder.")
 
     try:
         push_result = subprocess.run(
@@ -306,23 +316,23 @@ def git_push(repo_path: str):
         return f"--- Push successful ---\n{output}\n--- End ---"
 
     except subprocess.TimeoutExpired:
-        return "Error: Git push exceeded time limit."
+        raise ToolExecutionError("Git push exceeded time limit.")
     except subprocess.CalledProcessError as e:
         output = e.stdout.strip() if e.stdout else e.stderr.strip()
-        return f"Git error: {output}"
+        raise ToolExecutionError(f"Git error: {output}")
     except FileNotFoundError:
-        return "Error: 'git' command not found. Check git installation."
+        raise ToolExecutionError("'git' command not found. Check git installation.")
     except Exception as e:
-        return f"Error: {e}"
+        raise ToolExecutionError(str(e))
 
 
 def git_pull(repo_path: str = "."):
     """Pulls changes from the remote repository safely"""
     logger.debug("git_pull called")
     if not os.path.exists(repo_path):
-        return f"Error: Path '{repo_path}' does not exist."
+        raise ToolExecutionError(f"Path '{repo_path}' does not exist.")
     if not os.path.isdir(repo_path):
-        return f"Error: Path '{repo_path}' is not a folder."
+        raise ToolExecutionError(f"Path '{repo_path}' is not a folder.")
 
     try:
         result = subprocess.run(
@@ -349,23 +359,23 @@ def git_pull(repo_path: str = "."):
                 stdin=subprocess.DEVNULL,
                 check=False,
             )
-            return (
+            raise ToolExecutionError(
                 f"Conflict detected during git pull! Merge was automatically aborted to preserve repository state. "
                 f"Conflicting files need to be resolved manually by the developer.\nDetails:\n{error_output}"
             )
 
-        return f"Git error: {error_output}"
+        raise ToolExecutionError(f"Git error: {error_output}")
     except subprocess.TimeoutExpired:
-        return "Error: Git pull exceeded time limit."
+        raise ToolExecutionError("Git pull exceeded time limit.")
     except Exception as e:
-        return f"Error: {e}"
+        raise ToolExecutionError(str(e))
 
 
 def git_undo_last_commit(repo_path: str = "."):
     """Undoes the last local commit while preserving all changes in the working directory (git reset HEAD~1)"""
     logger.debug("git_undo_last_commit called")
     if not os.path.exists(repo_path) or not os.path.isdir(repo_path):
-        return f"Error: Path '{repo_path}' is not a valid directory."
+        raise ToolExecutionError(f"Path '{repo_path}' is not a valid directory.")
 
     try:
         result = subprocess.run(
@@ -380,6 +390,6 @@ def git_undo_last_commit(repo_path: str = "."):
         output = result.stdout.strip() or result.stderr.strip()
         return f"--- Successfully undone last commit ---\n{output}\nAll file changes were kept as uncommitted."
     except subprocess.CalledProcessError as e:
-        return f"Git error: {e.stderr.strip() or e.stdout.strip()}"
+        raise ToolExecutionError(f"Git error: {e.stderr.strip() or e.stdout.strip()}")
     except Exception as e:
-        return f"Error: {e}"
+        raise ToolExecutionError(str(e))

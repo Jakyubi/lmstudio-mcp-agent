@@ -5,13 +5,14 @@ import uvicorn
 from mcp.server import NotificationOptions, Server
 from mcp.server.models import InitializationOptions
 from mcp.server.sse import SseServerTransport
-from mcp.types import TextContent, Tool
+from mcp.types import CallToolResult, TextContent, Tool
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import Response
 from starlette.routing import Mount, Route
 
 import tools
+from tools import ToolExecutionError
 from workspace import WorkspaceManager
 
 # Logging configuration
@@ -207,7 +208,10 @@ async def call_tool(name: str, arguments: dict):
 
     if name not in TOOLS_MAP:
         logger.error(f"Requested unknown tool: {name}")
-        raise ValueError(f"Unknown tool: {name}")
+        return CallToolResult(
+            content=[TextContent(type="text", text=f"Unknown tool: {name}")],
+            isError=True,
+        )
     try:
         safe_args = WorkspaceManager.guard_arguments(arguments)
         handler = TOOLS_MAP[name]
@@ -215,10 +219,22 @@ async def call_tool(name: str, arguments: dict):
 
         logger.info(f"Tool {name} executed successfully.")
         logger.debug(f"Tool {name} result: {result}")
-        return [TextContent(type="text", text=str(result))]
-    except Exception as e:
+        return CallToolResult(
+            content=[TextContent(type="text", text=str(result))],
+            isError=False,
+        )
+    except ToolExecutionError as e:
         logger.exception(f"Error executing tool: {name}")
-        return [TextContent(type="text", text=f"Tool Execution Error: {e}")]
+        return CallToolResult(
+            content=[TextContent(type="text", text=str(e))],
+            isError=True,
+        )
+    except Exception as e:
+        logger.exception(f"Unexpected error executing tool: {name}")
+        return CallToolResult(
+            content=[TextContent(type="text", text=f"Tool Execution Error: {e}")],
+            isError=True,
+        )
 
 
 sse = SseServerTransport("/messages/")

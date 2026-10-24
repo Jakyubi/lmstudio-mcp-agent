@@ -160,18 +160,27 @@ def ask_agent(user_input: str, messages_history: list):
                 st.write(f"Arguments: `{tool_args_str}`")
 
                 try:
-                    result_text = mcp_client.call_tool(tool_name, tool_args)
-                    logger.debug(f"Server result for {tool_name}: {result_text}")
-                    st.success("Completed")
-                    st.code(result_text)
+                    result_text, is_error = mcp_client.call_tool(tool_name, tool_args)
+                    if is_error:
+                        logger.warning(
+                            f"Server reported error for {tool_name}: {result_text}"
+                        )
+                        status.update(label=f"Failed: {tool_name}", state="error")
+                        st.error(result_text)
+                        tool_content_for_llm = f"[TOOL ERROR]: {result_text}"
+                    else:
+                        logger.debug(f"Server result for {tool_name}: {result_text}")
+                        status.update(label=f"Completed: {tool_name}", state="complete")
+                        st.success("Completed")
+                        st.code(result_text)
+                        tool_content_for_llm = result_text
                 except Exception as e:
-                    result_text = f"Error using tool: {e}"
+                    tool_content_for_llm = f"App error using tool: {e}"
                     logger.exception(
                         f"App error during communication with tool {tool_name}"
                     )
-                    st.error(result_text)
-
-                status.update(state="complete")
+                    status.update(label=f"Execution error: {tool_name}", state="error")
+                    st.error(tool_content_for_llm)
 
             # Save tool's result to the history so model sees it in next loop iteration
             messages_history.append(
@@ -179,7 +188,7 @@ def ask_agent(user_input: str, messages_history: list):
                     "tool_call_id": tool_call.id,
                     "role": "tool",
                     "name": tool_name,
-                    "content": result_text,
+                    "content": tool_content_for_llm,
                 }
             )
             continue
@@ -208,7 +217,9 @@ def handle_pending_action(approved: bool):
 
     if approved:
         try:
-            result_text = mcp_client.call_tool(action["name"], action["args"])
+            result_text, is_error = mcp_client.call_tool(action["name"], action["args"])
+            if is_error:
+                result_text = f"[TOOL ERROR]: {result_text}"
         except Exception as e:
             result_text = f"Tool Execution Error: {e}"
     else:
@@ -294,6 +305,12 @@ if "pending_action" not in st.session_state:
 if "resume_agent" not in st.session_state:
     st.session_state.resume_agent = False
 
+tool_results = {
+    msg["tool_call_id"]: msg.get("content", "")
+    for msg in st.session_state.history
+    if msg.get("role") == "tool" and "tool_call_id" in msg
+}
+
 # Render message history in the UI
 for msg in st.session_state.history:
     role = msg.get("role")
@@ -306,15 +323,37 @@ for msg in st.session_state.history:
         with st.chat_message("assistant"):
             if msg.get("tool_calls"):
                 for tool in msg["tool_calls"]:
-                    with st.status(f"{tool['function']['name']}", state="complete"):
+                    call_id = tool.get("id")
+                    tool_name = tool["function"]["name"]
+                    result_content = tool_results.get(call_id, "")
+                    is_failed = result_content.startswith(("[TOOL ERROR]", "App error"))
+
+                    status_label = (
+                        f"Failed: {tool_name}"
+                        if is_failed
+                        else f"Completed: {tool_name}"
+                    )
+                    with st.status(
+                        status_label,
+                        state="error" if is_failed else "complete",
+                        expanded=False,
+                    ):
+                        st.write("Arguments:")
                         st.code(tool["function"].get("arguments", ""))
 
             if msg.get("content"):
                 st.markdown(msg["content"])
 
     elif role == "tool":
-        with st.expander(f"Tool: {msg['name']}"):
-            st.code(msg.get("content", ""))
+        content = msg.get("content", "")
+        is_failed = content.startswith(("[TOOL ERROR]", "App error"))
+        label = f"Tool output: {msg.get('name')}" + (" (Error)" if is_failed else "")
+
+        with st.expander(label, expanded=is_failed):
+            if is_failed:
+                st.error(content)
+            else:
+                st.code(content)
 
 
 # Main chat input receiving prompt from user

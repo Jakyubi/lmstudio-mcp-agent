@@ -47,16 +47,18 @@ class PersistentMCPClient:
         self.tools = tools_response.tools
         logger.info(f"Loaded {len(self.tools)} tool(s) from MCP server.")
 
-    def call_tool(self, name: str, arguments: Dict[str, Any]) -> str:
+    def call_tool(self, name: str, arguments: Dict[str, Any]) -> tuple[str, bool]:
         """Thread-safe, synchronous tool invocation for Streamlit."""
         if not self.session:
             raise RuntimeError("MCP Session is not active.")
 
         async def _call():
             result = await self.session.call_tool(name, arguments)
+            text_content = ""
             if result.content and len(result.content) > 0:
-                return result.content[0].text
-            return ""
+                text_content = result.content[0].text
+            is_error = bool(result.isError)
+            return text_content, is_error
 
         future = asyncio.run_coroutine_threadsafe(_call(), self.loop)
         return future.result(timeout=60.0)
