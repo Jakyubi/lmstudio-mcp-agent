@@ -26,13 +26,6 @@ API_KEY = os.getenv("API_KEY")
 BASE_URL = os.getenv("LM_STUDIO_URL")
 MCP_SERVER_URL = os.getenv("MCP_SERVER_URL", "http://127.0.0.1:8000/sse")
 
-CRITICAL_TOOLS = {
-    "git_commit",
-    "git_push",
-    "git_pull",
-    "git_undo_last_commit",
-    "write_file",
-}
 
 # Initialize OpenAI client configured for LM Studio
 client = OpenAI(base_url=BASE_URL, api_key=API_KEY, timeout=60.0)
@@ -144,7 +137,7 @@ def ask_agent(user_input: str, messages_history: list):
                 logger.error(f"JSON decode error: {e}")
 
             hitl_active = st.session_state.get("hitl_enabled", True)
-            if hitl_active and (tool_name in CRITICAL_TOOLS):
+            if hitl_active and is_tool_critical(tool_name):
                 st.session_state.pending_action = {
                     "tool_call_id": tool_call.id,
                     "name": tool_name,
@@ -236,6 +229,43 @@ def handle_pending_action(approved: bool):
 
     st.session_state.pending_action = None
     st.session_state.resume_agent = True
+
+
+def is_tool_critical(tool_name: str) -> bool:
+    for tool in mcp_client.tools:
+        if tool.name == tool_name:
+            ann = getattr(tool, "annotations", None)
+            if not ann:
+                return True
+
+            if hasattr(ann, "model_dump"):
+                data = ann.model_dump()
+            elif isinstance(ann, dict):
+                data = ann
+            else:
+                data = {
+                    "readOnlyHint": getattr(
+                        ann,
+                        "readOnlyHint",
+                        getattr(ann, "read_only_hint", None),
+                    ),
+                    "destructiveHint": getattr(
+                        ann,
+                        "destructiveHint",
+                        getattr(ann, "destructive_hint", None),
+                    ),
+                }
+
+            read_only = data.get("readOnlyHint", data.get("read_only_hint"))
+            destructive = data.get("destructiveHint", data.get("destructive_hint"))
+
+            if read_only is True:
+                return False
+
+            if destructive is True or read_only is False:
+                return True
+
+    return True
 
 
 st.set_page_config(page_title="LM Studio MCP App")
