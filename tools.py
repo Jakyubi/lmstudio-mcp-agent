@@ -3,6 +3,7 @@ import os
 import shlex
 import subprocess
 from datetime import datetime
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -19,29 +20,48 @@ def get_current_datetime():
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
-def list_directory(path: str):
-    """Lists the contents of a specified directory"""
-    logger.debug("list_directory called")
+def list_directory(path: str = ".", max_depth: int = 2):
+    """Zwraca strukturę katalogów w formie czytelnego drzewa."""
+    root = Path(path).resolve()
+    if not root.is_dir():
+        raise ToolExecutionError(f"Ścieżka '{path}' nie jest folderem.")
 
-    if not os.path.exists(path):
-        raise ToolExecutionError(f"Path '{path}' does not exist.")
-    if not os.path.isdir(path):
-        raise ToolExecutionError(f"Path '{path}' is not a folder.")
+    lines = []
+    MAX_FILES_PER_DIR = 20
 
-    try:
-        items = os.listdir(path)
-        if not items:
-            return f"'{path}' is empty."
+    def walk(folder: Path, current_depth: int):
+        indent = "  " * current_depth
+        is_git = " [Git]" if (folder / ".git").is_dir() else ""
+        lines.append(f"{indent}[DIR] {folder.name}/{is_git}")
 
-        result = [f"Folder '{path}' contains:"]
-        for item in items:
-            full_path = os.path.join(path, item)
-            item_type = "[DIR]" if os.path.isdir(full_path) else "[FILE]"
-            result.append(f"- {item_type} {item}")
+        if current_depth >= max_depth:
+            return
 
-        return "\n".join(result)
-    except Exception as e:
-        raise ToolExecutionError(f"Error reading folder: {e}")
+        try:
+            items = sorted(
+                folder.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())
+            )
+            files = [item for item in items if not item.is_dir()]
+            dirs = [item for item in items if item.is_dir()]
+
+            for d in dirs:
+                if d.name.startswith((".", "$", "__")) or d.name == "node_modules":
+                    lines.append(f"{indent}  [DIR] {d.name}/ (zwinięty folder)")
+                else:
+                    walk(d, current_depth + 1)
+
+            for f in files[:MAX_FILES_PER_DIR]:
+                lines.append(f"{indent}  [FILE] {f.name}")
+
+            hidden_count = len(files) - MAX_FILES_PER_DIR
+            if hidden_count > 0:
+                lines.append(f"{indent}  ... [i {hidden_count} innych plików]")
+
+        except PermissionError:
+            lines.append(f"{indent}  [LOCK]")
+
+    walk(root, 0)
+    return "\n".join(lines)
 
 
 def read_file(file_path: str):
@@ -381,6 +401,47 @@ def search_code(query: str, path: str = ".", max_results: int = 50):
 
     except subprocess.TimeoutExpired:
         raise ToolExecutionError("Search operation timed out.")
+    except FileNotFoundError:
+        raise ToolExecutionError("'git' command not found. Check git installation.")
+    except Exception as e:
+        raise ToolExecutionError(str(e))
+
+
+def get_recent_commits(repo_path: str = ".", count: int = 5):
+    """Returns a concise list of recent git commits."""
+    logger.debug(f"get_recent_commits called for {repo_path}, count={count}")
+    if not os.path.exists(repo_path):
+        raise ToolExecutionError(f"Path '{repo_path}' does not exist.")
+    if not os.path.isdir(repo_path):
+        raise ToolExecutionError(f"Path '{repo_path}' is not a folder.")
+
+    try:
+        safe_count = max(1, min(count, 20))
+        result = subprocess.run(
+            [
+                "git",
+                "log",
+                f"-n{safe_count}",
+                "--pretty=format:%h | %ad | %s",
+                "--date=short",
+            ],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            check=True,
+            stdin=subprocess.DEVNULL,
+            timeout=10,
+        )
+        output = result.stdout.strip()
+        if not output:
+            return f"--- Recent commits for {repo_path} ---\nNo commits found.\n--- End ---"
+        return f"--- Recent commits (last {safe_count}) for {repo_path} ---\n{output}\n--- End ---"
+
+    except subprocess.TimeoutExpired:
+        raise ToolExecutionError("Git log exceeded time limit.")
+    except subprocess.CalledProcessError as e:
+        output = e.stdout.strip() if e.stdout else e.stderr.strip()
+        raise ToolExecutionError(f"Git error: {output}")
     except FileNotFoundError:
         raise ToolExecutionError("'git' command not found. Check git installation.")
     except Exception as e:

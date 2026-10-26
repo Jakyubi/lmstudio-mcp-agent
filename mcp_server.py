@@ -60,9 +60,18 @@ def list_directory(
             description="Path to a folder you want to check. Use '.' for current directory.",
         ),
     ] = ".",
+    max_depth: Annotated[
+        int,
+        Field(
+            default=2,
+            description="How many levels deep to scan (1 to 5). Default is 2.",
+        ),
+    ] = 2,
 ) -> str:
     safe_args = WorkspaceManager.guard_arguments({"path": path})
-    return tools.list_directory(**safe_args)
+    # Ograniczenie wartości max_depth w granicach rozsądku (1-5), by chronić tokeny
+    safe_depth = max(1, min(max_depth, 5))
+    return tools.list_directory(path=safe_args["path"], max_depth=safe_depth)
 
 
 @mcp.tool(
@@ -356,9 +365,45 @@ def search_code(
     return tools.search_code(query=query, **safe_args)
 
 
+@mcp.tool(
+    name="get_recent_commits",
+    description="Returns a brief list of the most recent Git commits (hash, date, title). Use this to check recent history, summarize work, or prepare standup notes.",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
+)
+def get_recent_commits(
+    count: Annotated[
+        int,
+        Field(
+            default=5,
+            description="Number of recent commits to fetch (1 to 20). Default is 5.",
+        ),
+    ] = 5,
+    repo_path: Annotated[
+        str,
+        Field(
+            default=".",
+            description="Path to Git repository. Use '.' for current directory.",
+        ),
+    ] = ".",
+) -> str:
+    safe_args = WorkspaceManager.guard_arguments({"repo_path": repo_path})
+    return tools.get_recent_commits(repo_path=safe_args["repo_path"], count=count)
+
+
 # Utworzenie aplikacji Starlette z trasami /sse oraz /messages/
 app = mcp.sse_app()
 
 if __name__ == "__main__":
     logger.info("Starting MCP server.")
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    uvicorn.run(
+        "mcp_server:app",
+        host="127.0.0.1",
+        port=8000,
+        reload=True,
+        reload_excludes=["*.log", ".workspace"],
+    )
