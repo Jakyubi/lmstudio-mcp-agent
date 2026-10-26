@@ -145,6 +145,19 @@ def delete_file(file_path: str):
         raise ToolExecutionError(f"Error deleting file: {e}")
 
 
+def rename_file(old_path: str, new_path: str):
+    """Renames or moves a file."""
+    if not os.path.exists(old_path):
+        raise ToolExecutionError(f"File '{old_path}' does not exist.")
+    if os.path.exists(new_path):
+        raise ToolExecutionError(f"Destination '{new_path}' already exists.")
+    try:
+        os.rename(old_path, new_path)
+        return f"File renamed from {old_path} to {new_path}"
+    except Exception as e:
+        raise ToolExecutionError(f"Error renaming file: {e}")
+
+
 def git_status(repo_path: str = "."):
     """Returns the current status of the Git repository (short format)"""
     logger.debug("git_status called")

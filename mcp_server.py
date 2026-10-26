@@ -151,6 +151,30 @@ def delete_file(
 
 
 @mcp.tool(
+    name="rename_file",
+    description=(
+        "Renames a specified file. "
+        "ONLY use this tool if the user explicitly asks to rename, or move file to other folder. "
+        "Never rename files automatically without a clear user request."
+    ),
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=False,
+        openWorldHint=False,
+    ),
+)
+def rename_file(
+    old_path: Annotated[str, Field(description="Original path to the file.")],
+    new_path: Annotated[str, Field(description="New path to the file.")],
+) -> str:
+    safe_args = WorkspaceManager.guard_arguments(
+        {"old_path": old_path, "new_path": new_path}
+    )
+    return tools.rename_file(**safe_args)
+
+
+@mcp.tool(
     name="git_status",
     description=(
         "Returns an overview of changes in the repository (modified, staged, untracked files). "
