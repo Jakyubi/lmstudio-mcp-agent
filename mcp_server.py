@@ -153,7 +153,7 @@ def delete_file(
 @mcp.tool(
     name="rename_file",
     description=(
-        "Renames a specified file. "
+        "Renames a specified file. Will automaticly create missing folders if needed"
         "ONLY use this tool if the user explicitly asks to rename, or move file to other folder. "
         "Never rename files automatically without a clear user request."
     ),

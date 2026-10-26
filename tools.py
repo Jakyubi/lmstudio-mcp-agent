@@ -1,6 +1,7 @@
 import logging
 import os
 import shlex
+import shutil
 import subprocess
 from datetime import datetime
 from pathlib import Path
@@ -147,14 +148,29 @@ def delete_file(file_path: str):
 
 def rename_file(old_path: str, new_path: str):
     """Renames or moves a file."""
+    logger.debug(f"rename_file called: {old_path} -> {new_path}")
+
     if not os.path.exists(old_path):
         raise ToolExecutionError(f"File '{old_path}' does not exist.")
+
+    # Jeśli ścieżka docelowa wskazuje na istniejący katalog, przenieś plik do jego wnętrza
+    if os.path.isdir(new_path):
+        new_path = os.path.join(new_path, os.path.basename(old_path))
+
     if os.path.exists(new_path):
         raise ToolExecutionError(f"Destination '{new_path}' already exists.")
+
     try:
-        os.rename(old_path, new_path)
-        return f"File renamed from {old_path} to {new_path}"
+        # Automatyczne utworzenie brakujących katalogów nadrzędnych
+        dest_dir = os.path.dirname(new_path)
+        if dest_dir and not os.path.exists(dest_dir):
+            os.makedirs(dest_dir, exist_ok=True)
+            logger.info(f"Created missing directory tree: {dest_dir}")
+
+        shutil.move(old_path, new_path)
+        return f"File successfully moved/renamed from '{old_path}' to '{new_path}'"
     except Exception as e:
+        logger.exception(f"Error moving file from '{old_path}' to '{new_path}'")
         raise ToolExecutionError(f"Error renaming file: {e}")
 
 
