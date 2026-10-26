@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import threading
-from typing import Any, Dict, List
+from typing import Any
 
 from mcp import ClientSession
 from mcp.client.sse import sse_client
@@ -19,7 +19,7 @@ class PersistentMCPClient:
         self.session: ClientSession | None = None
         self._sse_ctx = None
         self._session_ctx = None
-        self.tools: List[Tool] = []
+        self.tools: list[Tool] = []
 
         self._thread = threading.Thread(target=self._run_loop, daemon=True)
         self._thread.start()
@@ -47,7 +47,7 @@ class PersistentMCPClient:
         self.tools = tools_response.tools
         logger.info(f"Loaded {len(self.tools)} tool(s) from MCP server.")
 
-    def call_tool(self, name: str, arguments: Dict[str, Any]) -> tuple[str, bool]:
+    def call_tool(self, name: str, arguments: dict[str, Any]) -> tuple[str, bool]:
         """Thread-safe, synchronous tool invocation for Streamlit."""
         if not self.session:
             raise RuntimeError("MCP Session is not active.")
@@ -63,7 +63,7 @@ class PersistentMCPClient:
         future = asyncio.run_coroutine_threadsafe(_call(), self.loop)
         return future.result(timeout=60.0)
 
-    def list_prompts(self) -> List[Any]:
+    def list_prompts(self) -> list[Any]:
         """Pobiera listę dostępnych szablonów Prompt z serwera MCP."""
         if not self.session:
             return []
@@ -75,7 +75,7 @@ class PersistentMCPClient:
         future = asyncio.run_coroutine_threadsafe(_list(), self.loop)
         return future.result(timeout=10.0)
 
-    def get_prompt(self, name: str, arguments: Dict[str, Any] | None = None) -> str:
+    def get_prompt(self, name: str, arguments: dict[str, Any] | None = None) -> str:
         """Pobiera treść promptu z serwera i scala wiadomości w pojedynczy ciąg tekstowy."""
         if not self.session:
             raise RuntimeError("MCP Session is not active.")

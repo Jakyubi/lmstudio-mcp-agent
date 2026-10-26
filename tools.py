@@ -12,8 +12,6 @@ logger = logging.getLogger(__name__)
 class ToolExecutionError(Exception):
     """Wyjątek rzucany w przypadku kontrolowanego błędu wykonania narzędzia."""
 
-    pass
-
 
 def get_current_datetime():
     """Returns current date and time"""
@@ -215,13 +213,25 @@ def get_git_diff(repo_path: str = "."):
 
     try:
         proc_diff = subprocess.run(
-            ["git", "diff", "HEAD"], cwd=repo_path, capture_output=True, text=True
+            ["git", "diff", "HEAD"],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            check=False,
+            stdin=subprocess.DEVNULL,
+            timeout=10,
         )
         diff_text = (proc_diff.stdout or "").strip()
 
         if not diff_text:
             proc_fallback = subprocess.run(
-                ["git", "diff"], cwd=repo_path, capture_output=True, text=True
+                ["git", "diff"],
+                cwd=repo_path,
+                capture_output=True,
+                text=True,
+                check=False,
+                stdin=subprocess.DEVNULL,
+                timeout=10,
             )
             diff_text = (proc_fallback.stdout or "").strip()
 
@@ -230,6 +240,9 @@ def get_git_diff(repo_path: str = "."):
             cwd=repo_path,
             capture_output=True,
             text=True,
+            check=False,
+            stdin=subprocess.DEVNULL,
+            timeout=10,
         )
         new_files = (proc_new.stdout or "").strip()
 
