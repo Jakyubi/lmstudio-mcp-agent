@@ -63,6 +63,43 @@ class PersistentMCPClient:
         future = asyncio.run_coroutine_threadsafe(_call(), self.loop)
         return future.result(timeout=60.0)
 
+    def list_prompts(self) -> List[Any]:
+        """Pobiera listę dostępnych szablonów Prompt z serwera MCP."""
+        if not self.session:
+            return []
+
+        async def _list():
+            res = await self.session.list_prompts()
+            return res.prompts
+
+        future = asyncio.run_coroutine_threadsafe(_list(), self.loop)
+        return future.result(timeout=10.0)
+
+    def get_prompt(self, name: str, arguments: Dict[str, Any] | None = None) -> str:
+        """Pobiera treść promptu z serwera i scala wiadomości w pojedynczy ciąg tekstowy."""
+        if not self.session:
+            raise RuntimeError("MCP Session is not active.")
+
+        async def _get():
+            res = await self.session.get_prompt(name, arguments or {})
+            texts = []
+            for msg in res.messages:
+                content = msg.content
+                if isinstance(content, str):
+                    texts.append(content)
+                elif hasattr(content, "text"):
+                    texts.append(content.text)
+                elif isinstance(content, list):
+                    for block in content:
+                        if hasattr(block, "text"):
+                            texts.append(block.text)
+                        elif isinstance(block, dict) and "text" in block:
+                            texts.append(block["text"])
+            return "\n\n".join(texts).strip()
+
+        future = asyncio.run_coroutine_threadsafe(_get(), self.loop)
+        return future.result(timeout=15.0)
+
     def close(self):
         """Proper closure of the transport and event loop."""
 

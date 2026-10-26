@@ -292,6 +292,34 @@ with st.sidebar:
     st.caption(current_ws)
 
     st.divider()
+    st.header("Szablony MCP (Prompts)")
+    st.caption("Kliknij, aby uruchomić gotowy scenariusz:")
+
+    is_busy = (
+        st.session_state.get("pending_action") is not None
+    ) or st.session_state.get("resume_agent", False)
+
+    try:
+        available_prompts = mcp_client.list_prompts()
+    except Exception as e:
+        available_prompts = []
+        logger.error(f"Nie udało się pobrać promptów MCP: {e}")
+
+    for p in available_prompts:
+        icon = "📝" if "commit" in p.name else "🔍"
+        button_title = f"{icon} {p.name.replace('_', ' ').capitalize()}"
+
+        if st.button(
+            button_title, help=p.description, use_container_width=True, disabled=is_busy
+        ):
+            try:
+                prompt_body = mcp_client.get_prompt(p.name)
+                st.session_state.pending_prompt_text = prompt_body
+                st.rerun()
+            except Exception as e:
+                st.error(f"Błąd ładowania promptu: {e}")
+
+    st.divider()
 
     st.toggle(
         "Wymagaj potwierdzeń (HITL)",
@@ -334,6 +362,9 @@ if "pending_action" not in st.session_state:
 
 if "resume_agent" not in st.session_state:
     st.session_state.resume_agent = False
+
+if "pending_prompt_text" not in st.session_state:
+    st.session_state.pending_prompt_text = None
 
 tool_results = {
     msg["tool_call_id"]: msg.get("content", "")
@@ -434,13 +465,19 @@ if st.session_state.resume_agent:
         ask_agent(None, st.session_state.history)
     st.rerun()
 
+triggered_from_button = st.session_state.pending_prompt_text
+if triggered_from_button:
+    st.session_state.pending_prompt_text = None
+
 prompt = st.chat_input(prompt_placeholder, disabled=is_waiting_for_approval)
 
-if prompt:
+user_message = triggered_from_button or prompt
+
+if user_message:
     with st.chat_message("user"):
-        st.markdown(prompt)
+        st.markdown(user_message)
 
     with st.chat_message("assistant"):
-        ask_agent(prompt, st.session_state.history)
+        ask_agent(user_message, st.session_state.history)
 
     st.rerun()

@@ -283,6 +283,47 @@ def git_undo_last_commit(
     return tools.git_undo_last_commit(**safe_args)
 
 
+@mcp.prompt(
+    name="prepare_conventional_commit",
+    description="Inspects diff and prepares a standardized Conventional Commit message.",
+)
+def prepare_conventional_commit() -> str:
+    return (
+        "Your task is to prepare a professional commit message following the Conventional Commits specification.\n\n"
+        "Execute EXACTLY these steps in sequence:\n"
+        "1. Call `git_status` to verify if there are any modified or staged files. "
+        "If the working tree is clean, inform the user and stop.\n"
+        "2. Call `get_git_diff` to fetch all uncommitted changes.\n"
+        "3. Analyze the diff to understand the main intent behind the changes (what was changed and why).\n"
+        "4. Propose a concise commit title in the format: `<type>(<optional-scope>): <imperative summary>` "
+        "(e.g., feat: add error handling, fix: prevent path traversal, refactor: streamline git calls).\n"
+        "5. Provide 2-3 concise bullet points explaining key changes.\n"
+        "6. Conclude by asking: 'Would you like me to commit these changes using git_commit?' "
+        "Do NOT call `git_commit` without explicit user confirmation."
+    )
+
+
+@mcp.prompt(
+    name="pre_commit_sanity_check",
+    description="Pre-commit audit: checks for leftover debugging artifacts, secrets, and repository clutter.",
+)
+def pre_commit_sanity_check() -> str:
+    return (
+        "Perform a pre-commit code hygiene and sanity audit. Follow these steps in sequence:\n\n"
+        "1. Call `git_status` to inspect modified and untracked files.\n"
+        "2. Check untracked files for artifacts that should NOT be committed (e.g., *.log files, *.env secrets, temp files). "
+        "Warn the user explicitly if any suspicious files are found.\n"
+        "3. Call `get_git_diff` to inspect modified code lines.\n"
+        "4. Scan the diff for leftover debugging artifacts:\n"
+        "   - Print/logging statements: print(), console.log(), breakpoint(), pdb, debugger;\n"
+        "   - Large blocks of commented-out, dead code.\n"
+        "5. Output a clean, structured checklist:\n"
+        "   - [ ] Repository Hygiene (Staged files vs untracked clutter)\n"
+        "   - [ ] Leftover Debug / Dead Code (Specify file and line, or state 'Clean')\n"
+        "   - [ ] Summary (2 sentences explaining what this change actually does)."
+    )
+
+
 # Utworzenie aplikacji Starlette z trasami /sse oraz /messages/
 app = mcp.sse_app()
 
