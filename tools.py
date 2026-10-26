@@ -133,103 +133,46 @@ def git_status(repo_path: str = "."):
 
 
 def get_git_diff(repo_path: str = "."):
-    """Returns the differences in uncommitted code (staged, unstaged, and untracked files) in a given repository"""
-    logger.debug("get_git_diff called")
-    if not os.path.exists(repo_path):
-        raise ToolExecutionError(f"Path '{repo_path}' does not exist.")
+    """Returns code differences and lists new files."""
     if not os.path.isdir(repo_path):
-        raise ToolExecutionError(f"Path '{repo_path}' is not a folder.")
+        raise ToolExecutionError(f"Invalid path: {repo_path}")
 
     try:
-        diff_parts = []
-
-        # Check whether repo has commits
-        has_head = (
-            subprocess.run(
-                ["git", "rev-parse", "--verify", "HEAD"],
-                cwd=repo_path,
-                capture_output=True,
-                text=True,
-                stdin=subprocess.DEVNULL,
-                timeout=5,
-                check=False,
-            ).returncode
-            == 0
+        proc_diff = subprocess.run(
+            ["git", "diff", "HEAD"], cwd=repo_path, capture_output=True, text=True
         )
+        diff_text = (proc_diff.stdout or "").strip()
 
-        # Get diff
-        diff_cmd = ["git", "diff", "HEAD"] if has_head else ["git", "diff", "--cached"]
-        tracked_diff = subprocess.run(
-            diff_cmd,
-            cwd=repo_path,
-            capture_output=True,
-            text=True,
-            check=True,
-            stdin=subprocess.DEVNULL,
-            timeout=10,
-        ).stdout.strip()
+        if not diff_text:
+            proc_fallback = subprocess.run(
+                ["git", "diff"], cwd=repo_path, capture_output=True, text=True
+            )
+            diff_text = (proc_fallback.stdout or "").strip()
 
-        if not has_head:
-            unstaged_diff = subprocess.run(
-                ["git", "diff"],
-                cwd=repo_path,
-                capture_output=True,
-                text=True,
-                check=True,
-                stdin=subprocess.DEVNULL,
-                timeout=10,
-            ).stdout.strip()
-            if unstaged_diff:
-                tracked_diff = f"{tracked_diff}\n{unstaged_diff}".strip()
-
-        if tracked_diff:
-            diff_parts.append(tracked_diff)
-
-        # Get new files list
-        untracked_proc = subprocess.run(
+        proc_new = subprocess.run(
             ["git", "ls-files", "--others", "--exclude-standard"],
             cwd=repo_path,
             capture_output=True,
             text=True,
-            check=True,
-            stdin=subprocess.DEVNULL,
-            timeout=10,
         )
-        untracked_files = [
-            f.strip() for f in untracked_proc.stdout.splitlines() if f.strip()
-        ]
+        new_files = (proc_new.stdout or "").strip()
 
-        # Get diff for each new file
-        for file_rel_path in untracked_files:
-            diff_new = subprocess.run(
-                ["git", "diff", "--no-index", "--", "/dev/null", file_rel_path],
-                cwd=repo_path,
-                capture_output=True,
-                text=True,
-                stdin=subprocess.DEVNULL,
-                timeout=5,
-                check=False,
-            )
-            if diff_new.stdout.strip():
-                diff_parts.append(diff_new.stdout.strip())
+        report = ""
+        if diff_text:
+            report += f"--- MODIFIED FILES ---\n{diff_text}\n\n"
+        if new_files:
+            report += f"--- NEW UNTRACKED FILES (Use 'read_file' tool to view their content) ---\n{new_files}\n"
 
-        full_diff = "\n\n".join(diff_parts).strip()
+        if not report:
+            return "No uncommitted changes."
 
-        if not full_diff:
-            return (
-                f"--- Result of git diff for {repo_path} ---\nNo changes\n--- End ---"
-            )
-        return f"--- Result of git diff for {repo_path} ---\n{full_diff}\n--- End ---"
+        if len(report) > 8000:
+            return report[:8000] + "\n... [TRUNCATED] Diff is too long."
 
-    except subprocess.TimeoutExpired:
-        raise ToolExecutionError("Git Diff exceeded time limit.")
-    except subprocess.CalledProcessError as e:
-        err = e.stderr.strip() if e.stderr else str(e)
-        raise ToolExecutionError(f"Git error: {err}")
-    except FileNotFoundError:
-        raise ToolExecutionError("'git' command not found. Check git installation.")
+        return report
+
     except Exception as e:
-        raise ToolExecutionError(str(e))
+        raise ToolExecutionError(f"Git error: {e}")
 
 
 def git_commit(repo_path: str, message: str, files_to_add: str = "."):
