@@ -118,6 +118,33 @@ def write_file(file_path: str, content: str):
         raise ToolExecutionError(f"Error writing file: {e}")
 
 
+def delete_file(file_path: str):
+    """Deletes a specified file."""
+    logger.debug(f"delete_file called for: {file_path}")
+
+    if not file_path or not file_path.strip():
+        raise ToolExecutionError("File path cannot be empty.")
+
+    if not os.path.exists(file_path):
+        raise ToolExecutionError(f"File '{file_path}' does not exist.")
+
+    if os.path.isdir(file_path):
+        raise ToolExecutionError(
+            f"Error: Path '{file_path}' is a directory, not a file. Use file paths only."
+        )
+
+    try:
+        os.remove(file_path)
+        return f"--- File deleted successfully ---\nPath: {file_path}\n--- End ---"
+    except PermissionError:
+        raise ToolExecutionError(
+            f"Access denied: lack of permissions to delete '{file_path}'."
+        )
+    except Exception as e:
+        logger.exception(f"Error deleting file {file_path}")
+        raise ToolExecutionError(f"Error deleting file: {e}")
+
+
 def git_status(repo_path: str = "."):
     """Returns the current status of the Git repository (short format)"""
     logger.debug("git_status called")

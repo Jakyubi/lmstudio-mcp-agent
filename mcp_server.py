@@ -128,6 +128,29 @@ def write_file(
 
 
 @mcp.tool(
+    name="delete_file",
+    description=(
+        "Deletes a specified file from the filesystem. "
+        "ONLY use this tool if the user explicitly asks to delete, remove, or trash a file. "
+        "Never delete files automatically without a clear user request."
+    ),
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=False,
+        openWorldHint=False,
+    ),
+)
+def delete_file(
+    file_path: Annotated[
+        str, Field(description="Exact path to the file you want to delete.")
+    ],
+) -> str:
+    safe_args = WorkspaceManager.guard_arguments({"file_path": file_path})
+    return tools.delete_file(**safe_args)
+
+
+@mcp.tool(
     name="git_status",
     description=(
         "Returns an overview of changes in the repository (modified, staged, untracked files). "
