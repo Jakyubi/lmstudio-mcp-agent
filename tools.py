@@ -336,3 +336,52 @@ def git_undo_last_commit(repo_path: str = "."):
         raise ToolExecutionError(f"Git error: {e.stderr.strip() or e.stdout.strip()}")
     except Exception as e:
         raise ToolExecutionError(str(e))
+
+
+def search_code(query: str, path: str = ".", max_results: int = 50):
+    """Searches for a text pattern in files using git grep."""
+    logger.debug(f"search_code called for: '{query}' in '{path}'")
+
+    if not os.path.exists(path):
+        raise ToolExecutionError(f"Path '{path}' does not exist.")
+    if not query or not query.strip():
+        raise ToolExecutionError("Search query cannot be empty.")
+
+    try:
+        result = subprocess.run(
+            ["git", "grep", "-n", "-i", "-I", query.strip(), "--", "."],
+            cwd=path,
+            capture_output=True,
+            text=True,
+            stdin=subprocess.DEVNULL,
+            timeout=10,
+            check=False,
+        )
+
+        if result.returncode == 1:
+            return f"No matches found for '{query}' in {path}."
+        if result.returncode != 0:
+            err = result.stderr.strip() or result.stdout.strip()
+            raise ToolExecutionError(f"Git grep error: {err}")
+
+        lines = [line for line in result.stdout.splitlines() if line.strip()]
+        if not lines:
+            return f"No matches found for '{query}' in {path}."
+
+        truncated = len(lines) > max_results
+        displayed_lines = lines[:max_results]
+
+        output = "\n".join(displayed_lines)
+        footer = (
+            f"\n... [TRUNCATED: Showing first {max_results} matches]"
+            if truncated
+            else "\n--- End ---"
+        )
+        return f"--- Search results for '{query}' ---\n{output}{footer}"
+
+    except subprocess.TimeoutExpired:
+        raise ToolExecutionError("Search operation timed out.")
+    except FileNotFoundError:
+        raise ToolExecutionError("'git' command not found. Check git installation.")
+    except Exception as e:
+        raise ToolExecutionError(str(e))

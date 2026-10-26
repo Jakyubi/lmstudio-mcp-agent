@@ -324,6 +324,38 @@ def pre_commit_sanity_check() -> str:
     )
 
 
+@mcp.tool(
+    name="search_code",
+    description=(
+        "Searches for a text pattern, keyword, or function name across project files. "
+        "Use this tool to locate where code is defined or referenced without reading files one by one."
+    ),
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
+)
+def search_code(
+    query: Annotated[
+        str,
+        Field(
+            description="The text or pattern to search for (e.g. 'def handle_click', 'TODO', 'DB_URL')."
+        ),
+    ],
+    path: Annotated[
+        str,
+        Field(
+            default=".",
+            description="Directory to search in. Use '.' for current workspace.",
+        ),
+    ] = ".",
+) -> str:
+    safe_args = WorkspaceManager.guard_arguments({"path": path})
+    return tools.search_code(query=query, **safe_args)
+
+
 # Utworzenie aplikacji Starlette z trasami /sse oraz /messages/
 app = mcp.sse_app()
 

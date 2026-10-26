@@ -28,7 +28,7 @@ MCP_SERVER_URL = os.getenv("MCP_SERVER_URL", "http://127.0.0.1:8000/sse")
 
 
 # Initialize OpenAI client configured for LM Studio
-client = OpenAI(base_url=BASE_URL, api_key=API_KEY, timeout=60.0)
+client = OpenAI(base_url=BASE_URL, api_key=API_KEY, timeout=200.0)
 
 
 @st.cache_resource
