@@ -315,15 +315,8 @@ with st.sidebar:
         st.session_state.get("pending_action") is not None
     ) or st.session_state.get("resume_agent", False)
 
-    try:
-        available_prompts = mcp_client.list_prompts()
-    except Exception as e:
-        available_prompts = []
-        logger.error(f"Nie udało się pobrać promptów MCP: {e}")
-
-    for p in available_prompts:
-        icon = "📝" if "commit" in p.name else "🔍"
-        button_title = f"{icon} {p.name.replace('_', ' ').capitalize()}"
+    for p in mcp_client.prompts:
+        button_title = f"{p.name.replace('_', ' ').capitalize()}"
 
         if st.button(
             button_title, help=p.description, use_container_width=True, disabled=is_busy
@@ -349,6 +342,17 @@ with st.sidebar:
         st.warning(
             "Tryb autonomiczny: Agent wykonuje wszystkie operacje bez pytania o zgodę."
         )
+
+    st.divider()
+    st.header("Dostępne narzędzia")
+    st.caption("Narzędzia załadowane z serwera MCP:")
+
+    if mcp_client.tools:
+        for tool in mcp_client.tools:
+            with st.expander(f"{tool.name}"):
+                st.write(tool.description)
+    else:
+        st.warning("Brak załadowanych narzędzi.")
 
     st.divider()
 

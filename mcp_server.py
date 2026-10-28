@@ -202,7 +202,7 @@ def git_status(
 
 
 @mcp.tool(
-    name="get_git_diff",
+    name="git_diff",
     description=(
         "Gets detailed code differences. Use this tool when a user asks to do a code review, "
         "check what they changed or find a bug in uncommitted code. The tool returns the exact code "
@@ -215,7 +215,7 @@ def git_status(
         openWorldHint=False,
     ),
 )
-def get_git_diff(
+def git_diff(
     repo_path: Annotated[
         str,
         Field(
@@ -225,7 +225,7 @@ def get_git_diff(
     ] = ".",
 ) -> str:
     safe_args = WorkspaceManager.guard_arguments({"repo_path": repo_path})
-    return tools.get_git_diff(**safe_args)
+    return tools.git_diff(**safe_args)
 
 
 @mcp.tool(
@@ -352,22 +352,22 @@ def project_context_refresher() -> str:
         "3. Output a concise summary with two sections:\n"
         "   - **Recent Activity**: A bulleted summary of the main features/fixes recently added to the project.\n"
         "   - **Current State**: Briefly list what is currently modified, untracked, or state that the working tree is clean.\n"
-        "4. STRICT RULE: Keep it brief, factual, and do NOT call `read_file` or `get_git_diff`.\n"
+        "4. STRICT RULE: Keep it brief, factual, and do NOT call `read_file` or `git_diff`.\n"
         "5. Conclude by asking: 'What would you like to work on next?'"
     )
 
 
 @mcp.prompt(
-    name="pre_commit_sanity_check",
+    name="pre_commit_check",
     description="Pre-commit audit: checks for leftover debugging artifacts, secrets, and repository clutter.",
 )
-def pre_commit_sanity_check() -> str:
+def pre_commit_check() -> str:
     return (
-        "Perform a pre-commit code hygiene and sanity audit. Follow these steps in sequence:\n\n"
+        "Perform a pre-commit code check. Follow these steps in sequence:\n\n"
         "1. Call `git_status` to inspect modified and untracked files.\n"
         "2. Check untracked files for artifacts that should NOT be committed (e.g., *.log files, *.env secrets, temp files). "
         "Warn the user explicitly if any suspicious files are found.\n"
-        "3. Call `get_git_diff` to inspect modified code lines.\n"
+        "3. Call `git_diff` to inspect modified code lines.\n"
         "4. Scan the diff for leftover debugging artifacts:\n"
         "   - Print/logging statements: print(), console.log(), breakpoint(), pdb, debugger;\n"
         "   - Large blocks of commented-out, dead code.\n"
@@ -388,7 +388,7 @@ def prepare_conventional_commit() -> str:
         "Execute EXACTLY these steps in sequence:\n"
         "1. Call `git_status` to verify if there are any modified or staged files. "
         "If the working tree is clean, inform the user and stop.\n"
-        "2. Call `get_git_diff` to fetch all uncommitted changes.\n"
+        "2. Call `git_diff` to fetch all uncommitted changes.\n"
         "3. Analyze the diff to understand the main intent behind the changes (what was changed and why).\n"
         "4. Propose a concise commit title in the format: `<type>(<optional-scope>): <imperative summary>` "
         "(e.g., feat: add error handling, fix: prevent path traversal, refactor: streamline git calls).\n"

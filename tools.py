@@ -208,7 +208,7 @@ def git_status(repo_path: str = "."):
         raise ToolExecutionError(str(e))
 
 
-def get_git_diff(repo_path: str = "."):
+def git_diff(repo_path: str = "."):
     """Returns code differences and lists new files."""
     if not os.path.isdir(repo_path):
         raise ToolExecutionError(f"Invalid path: {repo_path}")

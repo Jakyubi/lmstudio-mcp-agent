@@ -20,6 +20,7 @@ class PersistentMCPClient:
         self._sse_ctx = None
         self._session_ctx = None
         self.tools: list[Tool] = []
+        self.prompts: list[Any] = []
 
         self._thread = threading.Thread(target=self._run_loop, daemon=True)
         self._thread.start()
@@ -46,6 +47,10 @@ class PersistentMCPClient:
         tools_response = await self.session.list_tools()
         self.tools = tools_response.tools
         logger.info(f"Loaded {len(self.tools)} tool(s) from MCP server.")
+
+        prompts_response = await self.session.list_prompts()
+        self.prompts = prompts_response.prompts
+        logger.info(f"Loaded {len(self.prompts)} prompt(s) from MCP server.")
 
     def call_tool(self, name: str, arguments: dict[str, Any]) -> tuple[str, bool]:
         """Thread-safe, synchronous tool invocation for Streamlit."""
