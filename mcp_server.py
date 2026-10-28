@@ -340,22 +340,20 @@ def git_undo_last_commit(
 
 
 @mcp.prompt(
-    name="prepare_conventional_commit",
-    description="Inspects diff and prepares a standardized Conventional Commit message.",
+    name="project_context_refresher",
+    description="Przypomina, co było ostatnio robione w projekcie i jaki jest obecny stan plików.",
 )
-def prepare_conventional_commit() -> str:
+def project_context_refresher() -> str:
     return (
-        "Your task is to prepare a professional commit message following the Conventional Commits specification.\n\n"
-        "Execute EXACTLY these steps in sequence:\n"
-        "1. Call `git_status` to verify if there are any modified or staged files. "
-        "If the working tree is clean, inform the user and stop.\n"
-        "2. Call `get_git_diff` to fetch all uncommitted changes.\n"
-        "3. Analyze the diff to understand the main intent behind the changes (what was changed and why).\n"
-        "4. Propose a concise commit title in the format: `<type>(<optional-scope>): <imperative summary>` "
-        "(e.g., feat: add error handling, fix: prevent path traversal, refactor: streamline git calls).\n"
-        "5. Provide 2-3 concise bullet points explaining key changes.\n"
-        "6. Conclude by asking: 'Would you like me to commit these changes using git_commit?' "
-        "Do NOT call `git_commit` without explicit user confirmation."
+        "Task: Provide a quick refresher on what was recently done in this project and its current state.\n\n"
+        "Strict Steps:\n"
+        "1. Call `get_recent_commits` with count=7 to fetch the recent history.\n"
+        "2. Call `git_status` to check if there are any uncommitted changes left behind.\n"
+        "3. Output a concise summary with two sections:\n"
+        "   - **Recent Activity**: A bulleted summary of the main features/fixes recently added to the project.\n"
+        "   - **Current State**: Briefly list what is currently modified, untracked, or state that the working tree is clean.\n"
+        "4. STRICT RULE: Keep it brief, factual, and do NOT call `read_file` or `get_git_diff`.\n"
+        "5. Conclude by asking: 'What would you like to work on next?'"
     )
 
 
@@ -377,6 +375,59 @@ def pre_commit_sanity_check() -> str:
         "   - [ ] Repository Hygiene (Staged files vs untracked clutter)\n"
         "   - [ ] Leftover Debug / Dead Code (Specify file and line, or state 'Clean')\n"
         "   - [ ] Summary (2 sentences explaining what this change actually does)."
+    )
+
+
+@mcp.prompt(
+    name="prepare_conventional_commit",
+    description="Inspects diff and prepares a standardized Conventional Commit message.",
+)
+def prepare_conventional_commit() -> str:
+    return (
+        "Your task is to prepare a professional commit message following the Conventional Commits specification.\n\n"
+        "Execute EXACTLY these steps in sequence:\n"
+        "1. Call `git_status` to verify if there are any modified or staged files. "
+        "If the working tree is clean, inform the user and stop.\n"
+        "2. Call `get_git_diff` to fetch all uncommitted changes.\n"
+        "3. Analyze the diff to understand the main intent behind the changes (what was changed and why).\n"
+        "4. Propose a concise commit title in the format: `<type>(<optional-scope>): <imperative summary>` "
+        "(e.g., feat: add error handling, fix: prevent path traversal, refactor: streamline git calls).\n"
+        "5. Provide 2-3 concise bullet points explaining key changes.\n"
+        "6. Conclude by asking: 'Would you like me to commit these changes using git_commit?' "
+        "Do NOT call `git_commit` without explicit user confirmation."
+    )
+
+
+@mcp.prompt(
+    name="commit_and_push_all",
+    description="Szybka ścieżka: dodaje wszystkie zmiany, tworzy commit i od razu wysyła na GitHuba (Push).",
+)
+def commit_and_push_all() -> str:
+    return (
+        "Task: Stage all changes, commit them, and push to the remote repository.\n\n"
+        "Strict Steps:\n"
+        "1. Call `git_status` to verify there are actually changes to commit.\n"
+        "2. If the working tree is clean, tell the user 'Nothing to commit' and stop.\n"
+        "3. Invent a brief, generic Conventional Commit message based on the changed file names (e.g., 'chore: update files' or 'fix: update calculator').\n"
+        "4. Call `git_commit` (leaving files_to_add as '.' to stage everything).\n"
+        "5. If the commit is successful, immediately call `git_push`.\n"
+        "6. STRICT RULE: Keep your text responses minimal. Just execute the tools."
+    )
+
+
+@mcp.prompt(
+    name="find_all_todos",
+    description="Wyszukuje wszystkie komentarze TODO w projekcie i wyświetla ich zwięzłą listę.",
+)
+def find_all_todos() -> str:
+    return (
+        "Task: Find all pending 'TODO' comments in the codebase.\n\n"
+        "Strict Steps:\n"
+        "1. Call `search_code` with the query 'TODO'.\n"
+        "2. If no TODOs are found, inform the user and stop.\n"
+        "3. If found, output a list of the files and line numbers containing TODOs. Include TODOs text description.\n"
+        "4. STRICT RULE: Do NOT call `read_file` on any of these files. Do NOT try to explain or fix them yet.\n"
+        "5. Conclude by asking the user: 'Which of these TODOs would you like me to investigate further?'"
     )
 
 

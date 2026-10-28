@@ -64,7 +64,7 @@ def list_directory(path: str = ".", max_depth: int = 2):
 
 
 def read_file(file_path: str):
-    """Reads the content of text file."""
+    """Reads the content of text file (up to 10000 characters)."""
     logger.debug("read_file called")
     if not os.path.exists(file_path):
         raise ToolExecutionError(f"File '{file_path}' doesn't exist.")
@@ -73,12 +73,14 @@ def read_file(file_path: str):
 
     try:
         with open(file_path, "r", encoding="utf-8") as f:
-            content = f.read()
+            content = f.read(10000)
+            truncated = ""
+            if f.read(1):
+                truncated = "\n... [TRUNCATED] Plik jest zbyt długi, ucięto wynik."
+
             if not content.strip():
                 return f"File '{file_path}' is empty"
-            return (
-                f"--- Beginning of file {file_path} ---\n{content}\n--- End of file ---"
-            )
+            return f"--- Beginning of file {file_path} ---\n{content}{truncated}\n--- End of file ---"
     except UnicodeDecodeError:
         raise ToolExecutionError(
             f"File '{file_path}' is probably a binary file, not text file."
