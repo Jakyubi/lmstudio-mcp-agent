@@ -1,7 +1,9 @@
 import json
 import logging
 import os
+import urllib.parse
 
+import requests
 import streamlit as st
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -122,6 +124,9 @@ def ask_agent(user_input: str, messages_history: list):
                     temperature=0.2,
                     parallel_tool_calls=False,
                 )
+                if response.usage:
+                    st.session_state.last_prompt_tokens = response.usage.prompt_tokens
+
             except Exception as e:
                 error_msg = f"API Connection Error: Cannot connect to LLM, check LM Studio. ({e})"
                 logger.exception("Error connecting with LLM API.")
@@ -284,8 +289,55 @@ def is_tool_critical(tool_name: str) -> bool:
     return True
 
 
+def get_lmstudio_model_info():
+    """Pobiera informacje o aktualnie załadowanym modelu z LM Studio (API v0)."""
+    base_uri = urllib.parse.urlparse(BASE_URL)
+    api_url = f"{base_uri.scheme}://{base_uri.netloc}/api/v0/models"
+
+    try:
+        response = requests.get(api_url, timeout=2.0)
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("data") and len(data["data"]) > 0:
+                return data["data"][0]
+        return None
+    except requests.RequestException:
+        logger.warning("Nie można pobrać informacji o modelu z /api/v0/models")
+        return None
+
+
 st.set_page_config(page_title="LM Studio MCP App")
 st.title("LM Studio MCP App")
+
+with st.expander("Stats", expanded=False):
+    model_info = get_lmstudio_model_info()
+
+    if model_info:
+        model_name = model_info.get("id", "Nieznany model")
+        quantization = model_info.get("quantization", "Brak")
+        max_context = model_info.get("loaded_context_length", 0)
+
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            st.markdown("Model name:")
+            st.markdown(f"{model_name}")
+        with col2:
+            st.markdown("Kwantyzacja:")
+            st.markdown(f"{quantization}")
+        with col3:
+            current_tokens = st.session_state.get("last_prompt_tokens", 0)
+            st.write("Zużycie kontekstu: ")
+            if current_tokens > 0:
+                if max_context > 0:
+                    progress_val = min(current_tokens / max_context, 1.0)
+                    st.progress(progress_val, text=f"{current_tokens} / {max_context}")
+                else:
+                    st.write(f"{current_tokens} t")
+            else:
+                st.write("czekanie na zapytanie")
+    else:
+        st.error("Nie wykryto model")
 
 # Sidebar with user tools (clear chat/logs)
 with st.sidebar:
@@ -344,15 +396,13 @@ with st.sidebar:
         )
 
     st.divider()
-    st.header("Dostępne narzędzia")
-    st.caption("Narzędzia załadowane z serwera MCP:")
-
-    if mcp_client.tools:
-        for tool in mcp_client.tools:
-            with st.expander(f"{tool.name}"):
-                st.write(tool.description)
-    else:
-        st.warning("Brak załadowanych narzędzi.")
+    with st.expander("Dostępne narzędzia", expanded=False):
+        if mcp_client.tools:
+            for tool in mcp_client.tools:
+                with st.expander(f"{tool.name}"):
+                    st.write(tool.description)
+        else:
+            st.warning("Brak załadowanych narzędzi.")
 
     st.divider()
 
@@ -371,6 +421,11 @@ with st.sidebar:
                 except Exception as e:
                     st.error(f"Couldn't clear {file_path}: {e}")
         st.success("Logs cleared.")
+
+    if st.button("Reconnect MCP Server"):
+        st.cache_resource.clear()
+        st.session_state.history = []
+        st.rerun()
 
 
 # Initialize conversation history in Streamlit session
@@ -444,7 +499,7 @@ if st.session_state.pending_action:
     st.markdown("---")
     with st.container(border=True):
         st.error(f"**Wymagana autoryzacja operacji:** `{action['name']}`")
-        st.write("Sprawdź parametry przed zatwierdzeniem:")
+        st.write("Sprawdź parametry przed zatwierdzeniem: ")
 
         if action["name"] == "git_commit":
             st.info(f"**Wiadomość commita:** {action['args'].get('message')}")
