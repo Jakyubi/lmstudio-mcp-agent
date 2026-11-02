@@ -40,8 +40,8 @@ def get_current_datetime() -> str:
 @mcp.tool(
     name="list_directory",
     description=(
-        "Lists all files and subdirectories in a given path. This is your PRIMARY tool for exploring "
-        "the file system. Use this tool BEFORE assuming a file or folder exists. NEVER guess or "
+        "Lists all files and subdirectories in a given path. This is your primary tool for exploring "
+        "the file system. Use this tool before assuming a file or folder exists. Never guess or "
         "hallucinate directory names. If you are searching for something, start by listing the root "
         "or parent directory to verify the actual structure."
     ),
@@ -69,7 +69,6 @@ def list_directory(
     ] = 2,
 ) -> str:
     safe_args = WorkspaceManager.guard_arguments({"path": path})
-    # Ograniczenie wartości max_depth w granicach rozsądku (1-5), by chronić tokeny
     safe_depth = max(1, min(max_depth, 5))
     return tools.list_directory(path=safe_args["path"], max_depth=safe_depth)
 
@@ -154,7 +153,7 @@ def delete_file(
     name="rename_file",
     description=(
         "Renames a specified file. Will automaticly create missing folders if needed"
-        "ONLY use this tool if the user explicitly asks to rename, or move file to other folder. "
+        "Only use this tool if the user explicitly asks to rename, or move file to other folder. "
         "Never rename files automatically without a clear user request."
     ),
     annotations=ToolAnnotations(
@@ -178,7 +177,7 @@ def rename_file(
     name="git_status",
     description=(
         "Returns an overview of changes in the repository (modified, staged, untracked files). "
-        "Use this tool FIRST when asked about repository state, commits, or code reviews to identify "
+        "Use this tool first when asked about repository state, commits, or code reviews to identify "
         "which files were modified before fetching a full diff."
     ),
     annotations=ToolAnnotations(
@@ -352,7 +351,7 @@ def project_context_refresher() -> str:
         "3. Output a concise summary with two sections:\n"
         "   - **Recent Activity**: A bulleted summary of the main features/fixes recently added to the project.\n"
         "   - **Current State**: Briefly list what is currently modified, untracked, or state that the working tree is clean.\n"
-        "4. STRICT RULE: Keep it brief, factual, and do NOT call `read_file` or `git_diff`.\n"
+        "4. Keep it brief, factual, and do not call `read_file` or `git_diff`.\n"
         "5. Conclude by asking: 'What would you like to work on next?'"
     )
 
@@ -385,7 +384,7 @@ def pre_commit_check() -> str:
 def prepare_conventional_commit() -> str:
     return (
         "Your task is to prepare a professional commit message following the Conventional Commits specification.\n\n"
-        "Execute EXACTLY these steps in sequence:\n"
+        "Execute these steps in sequence:\n"
         "1. Call `git_status` to verify if there are any modified or staged files. "
         "If the working tree is clean, inform the user and stop.\n"
         "2. Call `git_diff` to fetch all uncommitted changes.\n"
@@ -394,7 +393,7 @@ def prepare_conventional_commit() -> str:
         "(e.g., feat: add error handling, fix: prevent path traversal, refactor: streamline git calls).\n"
         "5. Provide 2-3 concise bullet points explaining key changes.\n"
         "6. Conclude by asking: 'Would you like me to commit these changes using git_commit?' "
-        "Do NOT call `git_commit` without explicit user confirmation."
+        "Do not call `git_commit` without explicit user confirmation."
     )
 
 
@@ -411,7 +410,7 @@ def commit_and_push_all() -> str:
         "3. Invent a brief, generic Conventional Commit message based on the changed file names (e.g., 'chore: update files' or 'fix: update calculator').\n"
         "4. Call `git_commit` (leaving files_to_add as '.' to stage everything).\n"
         "5. If the commit is successful, immediately call `git_push`.\n"
-        "6. STRICT RULE: Keep your text responses minimal. Just execute the tools."
+        "6. Keep your text responses minimal. Just execute the tools."
     )
 
 
@@ -426,7 +425,7 @@ def find_all_todos() -> str:
         "1. Call `search_code` with the query 'TODO'.\n"
         "2. If no TODOs are found, inform the user and stop.\n"
         "3. If found, output a list of the files and line numbers containing TODOs. Include TODOs text description.\n"
-        "4. STRICT RULE: Do NOT call `read_file` on any of these files. Do NOT try to explain or fix them yet.\n"
+        "4. Do not call `read_file` on any of these files. Do not try to explain or fix them yet.\n"
         "5. Conclude by asking the user: 'Which of these TODOs would you like me to investigate further?'"
     )
 
