@@ -1,16 +1,16 @@
 import logging
 import os
 import shlex
+import shutil
 import subprocess
 from datetime import datetime
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 
 class ToolExecutionError(Exception):
     """Wyjątek rzucany w przypadku kontrolowanego błędu wykonania narzędzia."""
-
-    pass
 
 
 def get_current_datetime():
@@ -19,33 +19,52 @@ def get_current_datetime():
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
-def list_directory(path: str):
-    """Lists the contents of a specified directory"""
-    logger.debug("list_directory called")
+def list_directory(path: str = ".", max_depth: int = 2):
+    """Zwraca strukturę katalogów w formie czytelnego drzewa."""
+    root = Path(path).resolve()
+    if not root.is_dir():
+        raise ToolExecutionError(f"Ścieżka '{path}' nie jest folderem.")
 
-    if not os.path.exists(path):
-        raise ToolExecutionError(f"Path '{path}' does not exist.")
-    if not os.path.isdir(path):
-        raise ToolExecutionError(f"Path '{path}' is not a folder.")
+    lines = []
+    MAX_FILES_PER_DIR = 20
 
-    try:
-        items = os.listdir(path)
-        if not items:
-            return f"'{path}' is empty."
+    def walk(folder: Path, current_depth: int):
+        indent = "  " * current_depth
+        is_git = " [Git]" if (folder / ".git").is_dir() else ""
+        lines.append(f"{indent}[DIR] {folder.name}/{is_git}")
 
-        result = [f"Folder '{path}' contains:"]
-        for item in items:
-            full_path = os.path.join(path, item)
-            item_type = "[DIR]" if os.path.isdir(full_path) else "[FILE]"
-            result.append(f"- {item_type} {item}")
+        if current_depth >= max_depth:
+            return
 
-        return "\n".join(result)
-    except Exception as e:
-        raise ToolExecutionError(f"Error reading folder: {e}")
+        try:
+            items = sorted(
+                folder.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())
+            )
+            files = [item for item in items if not item.is_dir()]
+            dirs = [item for item in items if item.is_dir()]
+
+            for d in dirs:
+                if d.name.startswith((".", "$", "__")) or d.name == "node_modules":
+                    lines.append(f"{indent}  [DIR] {d.name}/ (zwinięty folder)")
+                else:
+                    walk(d, current_depth + 1)
+
+            for f in files[:MAX_FILES_PER_DIR]:
+                lines.append(f"{indent}  [FILE] {f.name}")
+
+            hidden_count = len(files) - MAX_FILES_PER_DIR
+            if hidden_count > 0:
+                lines.append(f"{indent}  ... [i {hidden_count} innych plików]")
+
+        except PermissionError:
+            lines.append(f"{indent}  [LOCK]")
+
+    walk(root, 0)
+    return "\n".join(lines)
 
 
 def read_file(file_path: str):
-    """Reads the content of text file."""
+    """Reads the content of text file (up to 10000 characters)."""
     logger.debug("read_file called")
     if not os.path.exists(file_path):
         raise ToolExecutionError(f"File '{file_path}' doesn't exist.")
@@ -54,12 +73,14 @@ def read_file(file_path: str):
 
     try:
         with open(file_path, "r", encoding="utf-8") as f:
-            content = f.read()
+            content = f.read(10000)
+            truncated = ""
+            if f.read(1):
+                truncated = "\n... [TRUNCATED] Plik jest zbyt długi, ucięto wynik."
+
             if not content.strip():
                 return f"File '{file_path}' is empty"
-            return (
-                f"--- Beginning of file {file_path} ---\n{content}\n--- End of file ---"
-            )
+            return f"--- Beginning of file {file_path} ---\n{content}{truncated}\n--- End of file ---"
     except UnicodeDecodeError:
         raise ToolExecutionError(
             f"File '{file_path}' is probably a binary file, not text file."
@@ -98,6 +119,61 @@ def write_file(file_path: str, content: str):
         raise ToolExecutionError(f"Error writing file: {e}")
 
 
+def delete_file(file_path: str):
+    """Deletes a specified file."""
+    logger.debug(f"delete_file called for: {file_path}")
+
+    if not file_path or not file_path.strip():
+        raise ToolExecutionError("File path cannot be empty.")
+
+    if not os.path.exists(file_path):
+        raise ToolExecutionError(f"File '{file_path}' does not exist.")
+
+    if os.path.isdir(file_path):
+        raise ToolExecutionError(
+            f"Error: Path '{file_path}' is a directory, not a file. Use file paths only."
+        )
+
+    try:
+        os.remove(file_path)
+        return f"--- File deleted successfully ---\nPath: {file_path}\n--- End ---"
+    except PermissionError:
+        raise ToolExecutionError(
+            f"Access denied: lack of permissions to delete '{file_path}'."
+        )
+    except Exception as e:
+        logger.exception(f"Error deleting file {file_path}")
+        raise ToolExecutionError(f"Error deleting file: {e}")
+
+
+def rename_file(old_path: str, new_path: str):
+    """Renames or moves a file."""
+    logger.debug(f"rename_file called: {old_path} -> {new_path}")
+
+    if not os.path.exists(old_path):
+        raise ToolExecutionError(f"File '{old_path}' does not exist.")
+
+    # Jeśli ścieżka docelowa wskazuje na istniejący katalog, przenieś plik do jego wnętrza
+    if os.path.isdir(new_path):
+        new_path = os.path.join(new_path, os.path.basename(old_path))
+
+    if os.path.exists(new_path):
+        raise ToolExecutionError(f"Destination '{new_path}' already exists.")
+
+    try:
+        # Automatyczne utworzenie brakujących katalogów nadrzędnych
+        dest_dir = os.path.dirname(new_path)
+        if dest_dir and not os.path.exists(dest_dir):
+            os.makedirs(dest_dir, exist_ok=True)
+            logger.info(f"Created missing directory tree: {dest_dir}")
+
+        shutil.move(old_path, new_path)
+        return f"File successfully moved/renamed from '{old_path}' to '{new_path}'"
+    except Exception as e:
+        logger.exception(f"Error moving file from '{old_path}' to '{new_path}'")
+        raise ToolExecutionError(f"Error renaming file: {e}")
+
+
 def git_status(repo_path: str = "."):
     """Returns the current status of the Git repository (short format)"""
     logger.debug("git_status called")
@@ -132,104 +208,62 @@ def git_status(repo_path: str = "."):
         raise ToolExecutionError(str(e))
 
 
-def get_git_diff(repo_path: str = "."):
-    """Returns the differences in uncommitted code (staged, unstaged, and untracked files) in a given repository"""
-    logger.debug("get_git_diff called")
-    if not os.path.exists(repo_path):
-        raise ToolExecutionError(f"Path '{repo_path}' does not exist.")
+def git_diff(repo_path: str = "."):
+    """Returns code differences and lists new files."""
     if not os.path.isdir(repo_path):
-        raise ToolExecutionError(f"Path '{repo_path}' is not a folder.")
+        raise ToolExecutionError(f"Invalid path: {repo_path}")
 
     try:
-        diff_parts = []
-
-        # Check whether repo has commits
-        has_head = (
-            subprocess.run(
-                ["git", "rev-parse", "--verify", "HEAD"],
-                cwd=repo_path,
-                capture_output=True,
-                text=True,
-                stdin=subprocess.DEVNULL,
-                timeout=5,
-                check=False,
-            ).returncode
-            == 0
-        )
-
-        # Get diff
-        diff_cmd = ["git", "diff", "HEAD"] if has_head else ["git", "diff", "--cached"]
-        tracked_diff = subprocess.run(
-            diff_cmd,
+        proc_diff = subprocess.run(
+            ["git", "diff", "HEAD"],
             cwd=repo_path,
             capture_output=True,
             text=True,
-            check=True,
+            check=False,
             stdin=subprocess.DEVNULL,
             timeout=10,
-        ).stdout.strip()
+        )
+        diff_text = (proc_diff.stdout or "").strip()
 
-        if not has_head:
-            unstaged_diff = subprocess.run(
+        if not diff_text:
+            proc_fallback = subprocess.run(
                 ["git", "diff"],
                 cwd=repo_path,
                 capture_output=True,
                 text=True,
-                check=True,
+                check=False,
                 stdin=subprocess.DEVNULL,
                 timeout=10,
-            ).stdout.strip()
-            if unstaged_diff:
-                tracked_diff = f"{tracked_diff}\n{unstaged_diff}".strip()
+            )
+            diff_text = (proc_fallback.stdout or "").strip()
 
-        if tracked_diff:
-            diff_parts.append(tracked_diff)
-
-        # Get new files list
-        untracked_proc = subprocess.run(
+        proc_new = subprocess.run(
             ["git", "ls-files", "--others", "--exclude-standard"],
             cwd=repo_path,
             capture_output=True,
             text=True,
-            check=True,
+            check=False,
             stdin=subprocess.DEVNULL,
             timeout=10,
         )
-        untracked_files = [
-            f.strip() for f in untracked_proc.stdout.splitlines() if f.strip()
-        ]
+        new_files = (proc_new.stdout or "").strip()
 
-        # Get diff for each new file
-        for file_rel_path in untracked_files:
-            diff_new = subprocess.run(
-                ["git", "diff", "--no-index", "--", "/dev/null", file_rel_path],
-                cwd=repo_path,
-                capture_output=True,
-                text=True,
-                stdin=subprocess.DEVNULL,
-                timeout=5,
-                check=False,
-            )
-            if diff_new.stdout.strip():
-                diff_parts.append(diff_new.stdout.strip())
+        report = ""
+        if diff_text:
+            report += f"--- MODIFIED FILES ---\n{diff_text}\n\n"
+        if new_files:
+            report += f"--- NEW UNTRACKED FILES (Use 'read_file' tool to view their content) ---\n{new_files}\n"
 
-        full_diff = "\n\n".join(diff_parts).strip()
+        if not report:
+            return "No uncommitted changes."
 
-        if not full_diff:
-            return (
-                f"--- Result of git diff for {repo_path} ---\nNo changes\n--- End ---"
-            )
-        return f"--- Result of git diff for {repo_path} ---\n{full_diff}\n--- End ---"
+        if len(report) > 8000:
+            return report[:8000] + "\n... [TRUNCATED] Diff is too long."
 
-    except subprocess.TimeoutExpired:
-        raise ToolExecutionError("Git Diff exceeded time limit.")
-    except subprocess.CalledProcessError as e:
-        err = e.stderr.strip() if e.stderr else str(e)
-        raise ToolExecutionError(f"Git error: {err}")
-    except FileNotFoundError:
-        raise ToolExecutionError("'git' command not found. Check git installation.")
+        return report
+
     except Exception as e:
-        raise ToolExecutionError(str(e))
+        raise ToolExecutionError(f"Git error: {e}")
 
 
 def git_commit(repo_path: str, message: str, files_to_add: str = "."):
@@ -391,5 +425,95 @@ def git_undo_last_commit(repo_path: str = "."):
         return f"--- Successfully undone last commit ---\n{output}\nAll file changes were kept as uncommitted."
     except subprocess.CalledProcessError as e:
         raise ToolExecutionError(f"Git error: {e.stderr.strip() or e.stdout.strip()}")
+    except Exception as e:
+        raise ToolExecutionError(str(e))
+
+
+def search_code(query: str, path: str = ".", max_results: int = 50):
+    """Searches for a text pattern in files using git grep."""
+    logger.debug(f"search_code called for: '{query}' in '{path}'")
+
+    if not os.path.exists(path):
+        raise ToolExecutionError(f"Path '{path}' does not exist.")
+    if not query or not query.strip():
+        raise ToolExecutionError("Search query cannot be empty.")
+
+    try:
+        result = subprocess.run(
+            ["git", "grep", "-n", "-i", "-I", query.strip(), "--", "."],
+            cwd=path,
+            capture_output=True,
+            text=True,
+            stdin=subprocess.DEVNULL,
+            timeout=10,
+            check=False,
+        )
+
+        if result.returncode == 1:
+            return f"No matches found for '{query}' in {path}."
+        if result.returncode != 0:
+            err = result.stderr.strip() or result.stdout.strip()
+            raise ToolExecutionError(f"Git grep error: {err}")
+
+        lines = [line for line in result.stdout.splitlines() if line.strip()]
+        if not lines:
+            return f"No matches found for '{query}' in {path}."
+
+        truncated = len(lines) > max_results
+        displayed_lines = lines[:max_results]
+
+        output = "\n".join(displayed_lines)
+        footer = (
+            f"\n... [TRUNCATED: Showing first {max_results} matches]"
+            if truncated
+            else "\n--- End ---"
+        )
+        return f"--- Search results for '{query}' ---\n{output}{footer}"
+
+    except subprocess.TimeoutExpired:
+        raise ToolExecutionError("Search operation timed out.")
+    except FileNotFoundError:
+        raise ToolExecutionError("'git' command not found. Check git installation.")
+    except Exception as e:
+        raise ToolExecutionError(str(e))
+
+
+def get_recent_commits(repo_path: str = ".", count: int = 5):
+    """Returns a concise list of recent git commits."""
+    logger.debug(f"get_recent_commits called for {repo_path}, count={count}")
+    if not os.path.exists(repo_path):
+        raise ToolExecutionError(f"Path '{repo_path}' does not exist.")
+    if not os.path.isdir(repo_path):
+        raise ToolExecutionError(f"Path '{repo_path}' is not a folder.")
+
+    try:
+        safe_count = max(1, min(count, 20))
+        result = subprocess.run(
+            [
+                "git",
+                "log",
+                f"-n{safe_count}",
+                "--pretty=format:%h | %ad | %s",
+                "--date=short",
+            ],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            check=True,
+            stdin=subprocess.DEVNULL,
+            timeout=10,
+        )
+        output = result.stdout.strip()
+        if not output:
+            return f"--- Recent commits for {repo_path} ---\nNo commits found.\n--- End ---"
+        return f"--- Recent commits (last {safe_count}) for {repo_path} ---\n{output}\n--- End ---"
+
+    except subprocess.TimeoutExpired:
+        raise ToolExecutionError("Git log exceeded time limit.")
+    except subprocess.CalledProcessError as e:
+        output = e.stdout.strip() if e.stdout else e.stderr.strip()
+        raise ToolExecutionError(f"Git error: {output}")
+    except FileNotFoundError:
+        raise ToolExecutionError("'git' command not found. Check git installation.")
     except Exception as e:
         raise ToolExecutionError(str(e))

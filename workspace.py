@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 class WorkspaceManager:
     """Handles active workspace and path isolation."""
 
-    PATH_KEYS = frozenset({"path", "file_path", "repo_path"})
+    PATH_KEYS = frozenset({"path", "file_path", "repo_path", "old_path", "new_path"})
 
     @classmethod
     def get_workspace(cls) -> Path:

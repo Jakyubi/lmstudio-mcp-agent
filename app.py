@@ -1,7 +1,9 @@
 import json
 import logging
 import os
+import urllib.parse
 
+import requests
 import streamlit as st
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -26,16 +28,9 @@ API_KEY = os.getenv("API_KEY")
 BASE_URL = os.getenv("LM_STUDIO_URL")
 MCP_SERVER_URL = os.getenv("MCP_SERVER_URL", "http://127.0.0.1:8000/sse")
 
-CRITICAL_TOOLS = {
-    "git_commit",
-    "git_push",
-    "git_pull",
-    "git_undo_last_commit",
-    "write_file",
-}
 
 # Initialize OpenAI client configured for LM Studio
-client = OpenAI(base_url=BASE_URL, api_key=API_KEY, timeout=60.0)
+client = OpenAI(base_url=BASE_URL, api_key=API_KEY, timeout=200.0)
 
 
 @st.cache_resource
@@ -77,19 +72,35 @@ def ask_agent(user_input: str, messages_history: list):
         logger.info("Resuming agent loop after human intervention.")
 
     system_prompt = """
-    You are an autonomous, Action-First AI assistant. Your primary goal is to fully resolve the user's request end-to-end using the tools available to you.
+    You are an autonomous, pragmatic software developer assistant operating directly within a local workspace using Model Context Protocol (MCP) tools.
 
-    CRITICAL RULES OF OPERATION:
-    1. NEVER ASK FOR PERMISSION: Do not ask the user questions like "Should I check this?", "Would you like me to proceed?", or "Tell me the next step." If a step is logically required to fulfill the request, execute the appropriate tool immediately.
-    2. ZERO LAZINESS: Do not instruct the user on how to perform a task if you have a tool capable of doing it. You must take the initiative to complete the work yourself.
-    3. CHAIN YOUR ACTIONS: You operate in a continuous loop. You can call a tool, observe its output, and immediately call another tool based on those results until the task is done.
-    4. NO HALLUCINATIONS: Never assume, guess, or make up facts, states, or data. If you lack information, use a tool to fetch it. 
-    5. FINAL ANSWER: Only provide a final, conversational text response to the user when the task is 100% complete, or you have hit a definitive, unresolvable dead end. Do not narrate your intermediate steps to the user unless explicitly asked.
-    6. STRICTLY ONE TOOL PER STEP: You can and must execute only ONE tool call at a time.
-    7. HANDLING MULTI-ITEM REQUESTS: When a user asks to perform multiple actions (e.g. create multiple files, run several checks, or asks to do something "at once", "together", "in one approach"), this means you must execute them AUTONOMOUSLY STEP-BY-STEP in a loop. Never try to do them all in a single tool call, and NEVER stop until ALL requested items are completed.
-    8. FORBIDDEN PREMATURE TEXT: Do NOT output conversational text until 100% of the requested items/actions are finished. If the user asked for 2 files and you have created only 1, calling a text response is an error—you MUST immediately invoke the next tool call for the remaining file.
+    CORE OPERATING PRINCIPLES:
+    1. STRICT TOOL DISCIPLINE:
+       - You MUST ONLY call tools that are explicitly defined in your available tools schema.
+       - NEVER invent, assume, or hallucinate tool names. If a tool is not in your schema, you do not have it.
+       - Execute exactly ONE tool call at a time.
 
-    ALWAYS OBSERVE BEFORE ACTING: If you need to choose, select, or modify something and you don't have the current list of items, your FIRST step MUST be to use a tool to list/observe the environment. NEVER guess names of files or directories.
+    2. ACTION-FIRST, BUT PRAGMATIC:
+       - If a task requires tool execution, invoke the required tool immediately without asking trivial permissions (e.g., do not ask "Can I check git?", "Should I proceed?").
+       - When modifying or creating files, parent directories are created automatically by tools like 'write_file' and 'rename_file'—you do NOT need to verify or create parent folders manually before writing or moving files.
+
+    3. ERROR HANDLING & FAIL-FAST (CRITICAL):
+       - If a tool execution fails ([TOOL ERROR]), carefully examine the error message.
+       - You may attempt ONE logical alternative using an EXISTING tool if sensible.
+       - NEVER repeatedly retry the exact same failing tool call.
+       - If you lack an appropriate tool to proceed, or hit an unresolvable blocker (missing path, permission error, merge conflict), STOP IMMEDIATELY. Output a concise text explanation describing what failed and what the user needs to do manually.
+
+    4. WORKFLOW CONVENTIONS:
+       - Renaming/Moving: Always provide full target paths including the file name (e.g., 'about/about_me.md', not just 'about/').
+       - Inspection: Only inspect directories or files if you genuinely lack information needed to proceed. Do not run redundant scans if the user already gave you exact paths.
+       - Git: Before committing, verify status/diff. Produce concise Conventional Commits (e.g., 'feat: add ...', 'fix: resolve ...').
+
+    5. FINAL RESPONSE:
+       - While executing sequential steps, do not output chat narration.
+       - Only return a conversational text response when:
+         a) All requested actions are 100% completed, OR
+         b) You encounter a blocker/missing tool and need to report the failure.
+       - Keep your final explanation brief, clear, and focused on what was accomplished.
     /no_think
     """
 
@@ -113,6 +124,9 @@ def ask_agent(user_input: str, messages_history: list):
                     temperature=0.2,
                     parallel_tool_calls=False,
                 )
+                if response.usage:
+                    st.session_state.last_prompt_tokens = response.usage.prompt_tokens
+
             except Exception as e:
                 error_msg = f"API Connection Error: Cannot connect to LLM, check LM Studio. ({e})"
                 logger.exception("Error connecting with LLM API.")
@@ -144,7 +158,7 @@ def ask_agent(user_input: str, messages_history: list):
                 logger.error(f"JSON decode error: {e}")
 
             hitl_active = st.session_state.get("hitl_enabled", True)
-            if hitl_active and (tool_name in CRITICAL_TOOLS):
+            if hitl_active and is_tool_critical(tool_name):
                 st.session_state.pending_action = {
                     "tool_call_id": tool_call.id,
                     "name": tool_name,
@@ -238,8 +252,92 @@ def handle_pending_action(approved: bool):
     st.session_state.resume_agent = True
 
 
+def is_tool_critical(tool_name: str) -> bool:
+    for tool in mcp_client.tools:
+        if tool.name == tool_name:
+            ann = getattr(tool, "annotations", None)
+            if not ann:
+                return True
+
+            if hasattr(ann, "model_dump"):
+                data = ann.model_dump()
+            elif isinstance(ann, dict):
+                data = ann
+            else:
+                data = {
+                    "readOnlyHint": getattr(
+                        ann,
+                        "readOnlyHint",
+                        getattr(ann, "read_only_hint", None),
+                    ),
+                    "destructiveHint": getattr(
+                        ann,
+                        "destructiveHint",
+                        getattr(ann, "destructive_hint", None),
+                    ),
+                }
+
+            read_only = data.get("readOnlyHint", data.get("read_only_hint"))
+            destructive = data.get("destructiveHint", data.get("destructive_hint"))
+
+            if read_only is True:
+                return False
+
+            if destructive is True or read_only is False:
+                return True
+
+    return True
+
+
+def get_lmstudio_model_info():
+    """Pobiera informacje o aktualnie załadowanym modelu z LM Studio (API v0)."""
+    base_uri = urllib.parse.urlparse(BASE_URL)
+    api_url = f"{base_uri.scheme}://{base_uri.netloc}/api/v0/models"
+
+    try:
+        response = requests.get(api_url, timeout=2.0)
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("data") and len(data["data"]) > 0:
+                return data["data"][0]
+        return None
+    except requests.RequestException:
+        logger.warning("Nie można pobrać informacji o modelu z /api/v0/models")
+        return None
+
+
 st.set_page_config(page_title="LM Studio MCP App")
 st.title("LM Studio MCP App")
+
+with st.expander("Stats", expanded=False):
+    model_info = get_lmstudio_model_info()
+
+    if model_info:
+        model_name = model_info.get("id", "Nieznany model")
+        quantization = model_info.get("quantization", "Brak")
+        max_context = model_info.get("loaded_context_length", 0)
+
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            st.markdown("Model name:")
+            st.markdown(f"{model_name}")
+        with col2:
+            st.markdown("Kwantyzacja:")
+            st.markdown(f"{quantization}")
+        with col3:
+            current_tokens = st.session_state.get("last_prompt_tokens", 0)
+            st.write("Zużycie kontekstu: ")
+            if current_tokens > 0:
+                if max_context > 0:
+                    progress_val = min(current_tokens / max_context, 1.0)
+                    st.progress(progress_val, text=f"{current_tokens} / {max_context}")
+                else:
+                    st.write(f"{current_tokens} t")
+            else:
+                st.write("czekanie na zapytanie")
+    else:
+        st.error("Nie wykryto model")
 
 # Sidebar with user tools (clear chat/logs)
 with st.sidebar:
@@ -262,6 +360,27 @@ with st.sidebar:
     st.caption(current_ws)
 
     st.divider()
+    st.header("Szablony MCP (Prompts)")
+    st.caption("Kliknij, aby uruchomić gotowy scenariusz:")
+
+    is_busy = (
+        st.session_state.get("pending_action") is not None
+    ) or st.session_state.get("resume_agent", False)
+
+    for p in mcp_client.prompts:
+        button_title = f"{p.name.replace('_', ' ').capitalize()}"
+
+        if st.button(
+            button_title, help=p.description, use_container_width=True, disabled=is_busy
+        ):
+            try:
+                prompt_body = mcp_client.get_prompt(p.name)
+                st.session_state.pending_prompt_text = prompt_body
+                st.rerun()
+            except Exception as e:
+                st.error(f"Błąd ładowania promptu: {e}")
+
+    st.divider()
 
     st.toggle(
         "Wymagaj potwierdzeń (HITL)",
@@ -275,6 +394,15 @@ with st.sidebar:
         st.warning(
             "Tryb autonomiczny: Agent wykonuje wszystkie operacje bez pytania o zgodę."
         )
+
+    st.divider()
+    with st.expander("Dostępne narzędzia", expanded=False):
+        if mcp_client.tools:
+            for tool in mcp_client.tools:
+                with st.expander(f"{tool.name}"):
+                    st.write(tool.description)
+        else:
+            st.warning("Brak załadowanych narzędzi.")
 
     st.divider()
 
@@ -294,6 +422,11 @@ with st.sidebar:
                     st.error(f"Couldn't clear {file_path}: {e}")
         st.success("Logs cleared.")
 
+    if st.button("Reconnect MCP Server"):
+        st.cache_resource.clear()
+        st.session_state.history = []
+        st.rerun()
+
 
 # Initialize conversation history in Streamlit session
 if "history" not in st.session_state:
@@ -304,6 +437,9 @@ if "pending_action" not in st.session_state:
 
 if "resume_agent" not in st.session_state:
     st.session_state.resume_agent = False
+
+if "pending_prompt_text" not in st.session_state:
+    st.session_state.pending_prompt_text = None
 
 tool_results = {
     msg["tool_call_id"]: msg.get("content", "")
@@ -363,7 +499,7 @@ if st.session_state.pending_action:
     st.markdown("---")
     with st.container(border=True):
         st.error(f"**Wymagana autoryzacja operacji:** `{action['name']}`")
-        st.write("Sprawdź parametry przed zatwierdzeniem:")
+        st.write("Sprawdź parametry przed zatwierdzeniem: ")
 
         if action["name"] == "git_commit":
             st.info(f"**Wiadomość commita:** {action['args'].get('message')}")
@@ -404,13 +540,19 @@ if st.session_state.resume_agent:
         ask_agent(None, st.session_state.history)
     st.rerun()
 
+triggered_from_button = st.session_state.pending_prompt_text
+if triggered_from_button:
+    st.session_state.pending_prompt_text = None
+
 prompt = st.chat_input(prompt_placeholder, disabled=is_waiting_for_approval)
 
-if prompt:
+user_message = triggered_from_button or prompt
+
+if user_message:
     with st.chat_message("user"):
-        st.markdown(prompt)
+        st.markdown(user_message)
 
     with st.chat_message("assistant"):
-        ask_agent(prompt, st.session_state.history)
+        ask_agent(user_message, st.session_state.history)
 
     st.rerun()

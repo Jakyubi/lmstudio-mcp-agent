@@ -1,18 +1,12 @@
-import asyncio
 import logging
+from typing import Annotated
 
 import uvicorn
-from mcp.server import NotificationOptions, Server
-from mcp.server.models import InitializationOptions
-from mcp.server.sse import SseServerTransport
-from mcp.types import CallToolResult, TextContent, Tool
-from starlette.applications import Starlette
-from starlette.requests import Request
-from starlette.responses import Response
-from starlette.routing import Mount, Route
+from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
+from pydantic import Field
 
 import tools
-from tools import ToolExecutionError
 from workspace import WorkspaceManager
 
 # Logging configuration
@@ -26,248 +20,487 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-server = Server("mcp-server")
-
-# Map linking tool names to functions from tools.py
-TOOLS_MAP = {
-    "get_current_datetime": tools.get_current_datetime,
-    "list_directory": tools.list_directory,
-    "read_file": tools.read_file,
-    "write_file": tools.write_file,
-    "git_status": tools.git_status,
-    "get_git_diff": tools.get_git_diff,
-    "git_commit": tools.git_commit,
-    "git_push": tools.git_push,
-    "git_pull": tools.git_pull,
-    "git_undo_last_commit": tools.git_undo_last_commit,
-}
+mcp = FastMCP("mcp-server")
 
 
-@server.list_tools()
-async def list_tools():
-    """Defines tool schemas (name, description, arguments)"""
-    return [
-        Tool(
-            name="get_current_datetime",
-            description="Returns current date and time.",
-            inputSchema={"type": "object", "properties": {}},
-        ),
-        Tool(
-            name="list_directory",
-            description="Lists all files and subdirectories in a given path. This is your PRIMARY tool for exploring "
-            "the file system. Use this tool BEFORE assuming a file or folder exists. NEVER guess or "
-            "hallucinate directory names. If you are searching for something, start by listing the root "
-            "or parent directory to verify the actual structure.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "path": {
-                        "type": "string",
-                        "description": "Path to a folder you want to check. Use '.' for current directory.",
-                    }
-                },
-                "required": ["path"],
-            },
-        ),
-        Tool(
-            name="read_file",
-            description="Reads text file",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "file_path": {
-                        "type": "string",
-                        "description": "Exact path to a file you want to read.",
-                    }
-                },
-                "required": ["file_path"],
-            },
-        ),
-        Tool(
-            name="write_file",
-            description="Creates a new file or completely overwrites an existing file with the specified content. "
-            "When modifying an existing file, make sure you have read it first with read_file "
-            "and provide the complete modified content here.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "file_path": {
-                        "type": "string",
-                        "description": "Path to the file to create or overwrite (e.g. 'main.py' or 'src/utils.py').",
-                    },
-                    "content": {
-                        "type": "string",
-                        "description": "The full text/code to be written into the file.",
-                    },
-                },
-                "required": ["file_path", "content"],
-            },
-        ),
-        Tool(
-            name="git_status",
-            description="Returns an overview of changes in the repository (modified, staged, untracked files). "
-            "Use this tool FIRST when asked about repository state, commits, or code reviews to identify "
-            "which files were modified before fetching a full diff.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "repo_path": {
-                        "type": "string",
-                        "description": "Path to Git repository. Use '.' for current directory.",
-                    }
-                },
-                "required": ["repo_path"],
-            },
-        ),
-        Tool(
-            name="get_git_diff",
-            description="Gets detailed code differences. Use this tool when a user asks to do a code review, check what they changed or find a bug in uncommitted code. The tool returns the exact code that was added or removed.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "repo_path": {
-                        "type": "string",
-                        "description": "Path to Git repository.",
-                    }
-                },
-                "required": ["repo_path"],
-            },
-        ),
-        Tool(
-            name="git_commit",
-            description="Stages files and creates a new Git commit. Only use this tool if the user asks you to commit changes to git. Always use a clear, descriptive commit message based on actual changes.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "repo_path": {
-                        "type": "string",
-                        "description": "Path to Git repository. Use '.' for current directory.",
-                    },
-                    "message": {
-                        "type": "string",
-                        "description": "The commit message explaining changes.",
-                    },
-                    "files_to_add": {
-                        "type": "string",
-                        "description": "Space-separated list of files to stage before committing (e.g. 'file1.html file2.html') or '.' to stage all changes.",
-                    },
-                },
-                "required": ["repo_path", "message"],
-            },
-        ),
-        Tool(
-            name="git_push",
-            description="Pushes committed local changes to the remote repository. Only use when user asks you to push changes to GitHub.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "repo_path": {
-                        "type": "string",
-                        "description": "Path to Git repository.",
-                    }
-                },
-                "required": ["repo_path"],
-            },
-        ),
-        Tool(
-            name="git_pull",
-            description="Pulls changes from the remote repository to synchronize local branch with remote before pushing. Use when remote changes need to be fetched.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "repo_path": {
-                        "type": "string",
-                        "description": "Path to Git repository. Use '.' for current directory.",
-                    }
-                },
-                "required": ["repo_path"],
-            },
-        ),
-        Tool(
-            name="git_undo_last_commit",
-            description="Undoes the most recent local commit while keeping all changes in the files. Use this ONLY when the user explicitly requests to undo or revert the last commit.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "repo_path": {
-                        "type": "string",
-                        "description": "Path to Git repository. Use '.' for current directory.",
-                    }
-                },
-                "required": ["repo_path"],
-            },
-        ),
-    ]
-
-
-@server.call_tool()
-async def call_tool(name: str, arguments: dict):
-    """Receives a tool execution request from the client, maps it, and executes the function"""
-    logger.info(f"\n\nReceived tool call request: {name}")
-    logger.debug(f"Arguments for {name}: {arguments}")
-
-    if name not in TOOLS_MAP:
-        logger.error(f"Requested unknown tool: {name}")
-        return CallToolResult(
-            content=[TextContent(type="text", text=f"Unknown tool: {name}")],
-            isError=True,
-        )
-    try:
-        safe_args = WorkspaceManager.guard_arguments(arguments)
-        handler = TOOLS_MAP[name]
-        result = await asyncio.to_thread(handler, **safe_args)
-
-        logger.info(f"Tool {name} executed successfully.")
-        logger.debug(f"Tool {name} result: {result}")
-        return CallToolResult(
-            content=[TextContent(type="text", text=str(result))],
-            isError=False,
-        )
-    except ToolExecutionError as e:
-        logger.exception(f"Error executing tool: {name}")
-        return CallToolResult(
-            content=[TextContent(type="text", text=str(e))],
-            isError=True,
-        )
-    except Exception as e:
-        logger.exception(f"Unexpected error executing tool: {name}")
-        return CallToolResult(
-            content=[TextContent(type="text", text=f"Tool Execution Error: {e}")],
-            isError=True,
-        )
-
-
-sse = SseServerTransport("/messages/")
-
-
-async def handle_sse(request: Request):
-    """Handles SSE stream connection"""
-    async with sse.connect_sse(request.scope, request.receive, request._send) as (
-        read_stream,
-        write_stream,
-    ):
-        await server.run(
-            read_stream,
-            write_stream,
-            InitializationOptions(
-                server_name="mcp-server",
-                server_version="1.0.0",
-                capabilities=server.get_capabilities(
-                    notification_options=NotificationOptions(),
-                    experimental_capabilities={},
-                ),
-            ),
-        )
-    return Response()
-
-
-starlette_app = Starlette(
-    routes=[
-        Route("/sse", endpoint=handle_sse),
-        Mount("/messages/", app=sse.handle_post_message),
-    ]
+@mcp.tool(
+    name="get_current_datetime",
+    description="Returns current date and time.",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
 )
+def get_current_datetime() -> str:
+    return tools.get_current_datetime()
+
+
+@mcp.tool(
+    name="list_directory",
+    description=(
+        "Lists all files and subdirectories in a given path. This is your PRIMARY tool for exploring "
+        "the file system. Use this tool BEFORE assuming a file or folder exists. NEVER guess or "
+        "hallucinate directory names. If you are searching for something, start by listing the root "
+        "or parent directory to verify the actual structure."
+    ),
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
+)
+def list_directory(
+    path: Annotated[
+        str,
+        Field(
+            default=".",
+            description="Path to a folder you want to check. Use '.' for current directory.",
+        ),
+    ] = ".",
+    max_depth: Annotated[
+        int,
+        Field(
+            default=2,
+            description="How many levels deep to scan (1 to 5). Default is 2.",
+        ),
+    ] = 2,
+) -> str:
+    safe_args = WorkspaceManager.guard_arguments({"path": path})
+    # Ograniczenie wartości max_depth w granicach rozsądku (1-5), by chronić tokeny
+    safe_depth = max(1, min(max_depth, 5))
+    return tools.list_directory(path=safe_args["path"], max_depth=safe_depth)
+
+
+@mcp.tool(
+    name="read_file",
+    description="Reads text file",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
+)
+def read_file(
+    file_path: Annotated[
+        str, Field(description="Exact path to a file you want to read.")
+    ],
+) -> str:
+    safe_args = WorkspaceManager.guard_arguments({"file_path": file_path})
+    return tools.read_file(**safe_args)
+
+
+@mcp.tool(
+    name="write_file",
+    description=(
+        "Creates a new file or completely overwrites an existing file with the specified content. "
+        "When modifying an existing file, make sure you have read it first with read_file "
+        "and provide the complete modified content here."
+    ),
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
+)
+def write_file(
+    file_path: Annotated[
+        str,
+        Field(
+            description="Path to the file to create or overwrite (e.g. 'main.py' or 'src/utils.py')."
+        ),
+    ],
+    content: Annotated[
+        str,
+        Field(
+            description="The full text/code to be written into the file.",
+        ),
+    ],
+) -> str:
+    safe_args = WorkspaceManager.guard_arguments(
+        {"file_path": file_path, "content": content}
+    )
+    return tools.write_file(**safe_args)
+
+
+@mcp.tool(
+    name="delete_file",
+    description=(
+        "Deletes a specified file from the filesystem. "
+        "ONLY use this tool if the user explicitly asks to delete, remove, or trash a file. "
+        "Never delete files automatically without a clear user request."
+    ),
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=False,
+        openWorldHint=False,
+    ),
+)
+def delete_file(
+    file_path: Annotated[
+        str, Field(description="Exact path to the file you want to delete.")
+    ],
+) -> str:
+    safe_args = WorkspaceManager.guard_arguments({"file_path": file_path})
+    return tools.delete_file(**safe_args)
+
+
+@mcp.tool(
+    name="rename_file",
+    description=(
+        "Renames a specified file. Will automaticly create missing folders if needed"
+        "ONLY use this tool if the user explicitly asks to rename, or move file to other folder. "
+        "Never rename files automatically without a clear user request."
+    ),
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=False,
+        openWorldHint=False,
+    ),
+)
+def rename_file(
+    old_path: Annotated[str, Field(description="Original path to the file.")],
+    new_path: Annotated[str, Field(description="New path to the file.")],
+) -> str:
+    safe_args = WorkspaceManager.guard_arguments(
+        {"old_path": old_path, "new_path": new_path}
+    )
+    return tools.rename_file(**safe_args)
+
+
+@mcp.tool(
+    name="git_status",
+    description=(
+        "Returns an overview of changes in the repository (modified, staged, untracked files). "
+        "Use this tool FIRST when asked about repository state, commits, or code reviews to identify "
+        "which files were modified before fetching a full diff."
+    ),
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
+)
+def git_status(
+    repo_path: Annotated[
+        str,
+        Field(
+            default=".",
+            description="Path to Git repository. Use '.' for current directory.",
+        ),
+    ] = ".",
+) -> str:
+    safe_args = WorkspaceManager.guard_arguments({"repo_path": repo_path})
+    return tools.git_status(**safe_args)
+
+
+@mcp.tool(
+    name="git_diff",
+    description=(
+        "Gets detailed code differences. Use this tool when a user asks to do a code review, "
+        "check what they changed or find a bug in uncommitted code. The tool returns the exact code "
+        "that was added or removed."
+    ),
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
+)
+def git_diff(
+    repo_path: Annotated[
+        str,
+        Field(
+            default=".",
+            description="Path to Git repository. Use '.' for current directory.",
+        ),
+    ] = ".",
+) -> str:
+    safe_args = WorkspaceManager.guard_arguments({"repo_path": repo_path})
+    return tools.git_diff(**safe_args)
+
+
+@mcp.tool(
+    name="git_commit",
+    description=(
+        "Stages files and creates a new Git commit. Only use this tool if the user asks you to commit changes to git. "
+        "Always use a clear, descriptive commit message based on actual changes."
+    ),
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=False,
+        openWorldHint=False,
+    ),
+)
+def git_commit(
+    message: Annotated[
+        str, Field(description="The commit message explaining changes.")
+    ],
+    repo_path: Annotated[
+        str,
+        Field(
+            default=".",
+            description="Path to Git repository. Use '.' for current directory.",
+        ),
+    ] = ".",
+    files_to_add: Annotated[
+        str,
+        Field(
+            default=".",
+            description="Space-separated list of files to stage before committing (e.g. 'file1.html file2.html') or '.' to stage all changes.",
+        ),
+    ] = ".",
+) -> str:
+    safe_args = WorkspaceManager.guard_arguments(
+        {
+            "repo_path": repo_path,
+            "message": message,
+            "files_to_add": files_to_add,
+        }
+    )
+    return tools.git_commit(**safe_args)
+
+
+@mcp.tool(
+    name="git_push",
+    description="Pushes committed local changes to the remote repository. Only use when user asks you to push changes to GitHub.",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=False,
+        openWorldHint=True,
+    ),
+)
+def git_push(
+    repo_path: Annotated[
+        str,
+        Field(
+            default=".",
+            description="Path to Git repository. Use '.' for current directory.",
+        ),
+    ] = ".",
+) -> str:
+    safe_args = WorkspaceManager.guard_arguments({"repo_path": repo_path})
+    return tools.git_push(**safe_args)
+
+
+@mcp.tool(
+    name="git_pull",
+    description="Pulls changes from the remote repository to synchronize local branch with remote before pushing. Use when remote changes need to be fetched.",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=False,
+        openWorldHint=True,
+    ),
+)
+def git_pull(
+    repo_path: Annotated[
+        str,
+        Field(
+            default=".",
+            description="Path to Git repository. Use '.' for current directory.",
+        ),
+    ] = ".",
+) -> str:
+    safe_args = WorkspaceManager.guard_arguments({"repo_path": repo_path})
+    return tools.git_pull(**safe_args)
+
+
+@mcp.tool(
+    name="git_undo_last_commit",
+    description="Undoes the most recent local commit while keeping all changes in the files. Use this ONLY when the user explicitly requests to undo or revert the last commit.",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=False,
+        openWorldHint=False,
+    ),
+)
+def git_undo_last_commit(
+    repo_path: Annotated[
+        str,
+        Field(
+            default=".",
+            description="Path to Git repository. Use '.' for current directory.",
+        ),
+    ] = ".",
+) -> str:
+    safe_args = WorkspaceManager.guard_arguments({"repo_path": repo_path})
+    return tools.git_undo_last_commit(**safe_args)
+
+
+@mcp.prompt(
+    name="project_context_refresher",
+    description="Przypomina, co było ostatnio robione w projekcie i jaki jest obecny stan plików.",
+)
+def project_context_refresher() -> str:
+    return (
+        "Task: Provide a quick refresher on what was recently done in this project and its current state.\n\n"
+        "Strict Steps:\n"
+        "1. Call `get_recent_commits` with count=7 to fetch the recent history.\n"
+        "2. Call `git_status` to check if there are any uncommitted changes left behind.\n"
+        "3. Output a concise summary with two sections:\n"
+        "   - **Recent Activity**: A bulleted summary of the main features/fixes recently added to the project.\n"
+        "   - **Current State**: Briefly list what is currently modified, untracked, or state that the working tree is clean.\n"
+        "4. STRICT RULE: Keep it brief, factual, and do NOT call `read_file` or `git_diff`.\n"
+        "5. Conclude by asking: 'What would you like to work on next?'"
+    )
+
+
+@mcp.prompt(
+    name="pre_commit_check",
+    description="Pre-commit audit: checks for leftover debugging artifacts, secrets, and repository clutter.",
+)
+def pre_commit_check() -> str:
+    return (
+        "Perform a pre-commit code check. Follow these steps in sequence:\n\n"
+        "1. Call `git_status` to inspect modified and untracked files.\n"
+        "2. Check untracked files for artifacts that should NOT be committed (e.g., *.log files, *.env secrets, temp files). "
+        "Warn the user explicitly if any suspicious files are found.\n"
+        "3. Call `git_diff` to inspect modified code lines.\n"
+        "4. Scan the diff for leftover debugging artifacts:\n"
+        "   - Print/logging statements: print(), console.log(), breakpoint(), pdb, debugger;\n"
+        "   - Large blocks of commented-out, dead code.\n"
+        "5. Output a clean, structured checklist:\n"
+        "   - [ ] Repository Hygiene (Staged files vs untracked clutter)\n"
+        "   - [ ] Leftover Debug / Dead Code (Specify file and line, or state 'Clean')\n"
+        "   - [ ] Summary (2 sentences explaining what this change actually does)."
+    )
+
+
+@mcp.prompt(
+    name="prepare_conventional_commit",
+    description="Inspects diff and prepares a standardized Conventional Commit message.",
+)
+def prepare_conventional_commit() -> str:
+    return (
+        "Your task is to prepare a professional commit message following the Conventional Commits specification.\n\n"
+        "Execute EXACTLY these steps in sequence:\n"
+        "1. Call `git_status` to verify if there are any modified or staged files. "
+        "If the working tree is clean, inform the user and stop.\n"
+        "2. Call `git_diff` to fetch all uncommitted changes.\n"
+        "3. Analyze the diff to understand the main intent behind the changes (what was changed and why).\n"
+        "4. Propose a concise commit title in the format: `<type>(<optional-scope>): <imperative summary>` "
+        "(e.g., feat: add error handling, fix: prevent path traversal, refactor: streamline git calls).\n"
+        "5. Provide 2-3 concise bullet points explaining key changes.\n"
+        "6. Conclude by asking: 'Would you like me to commit these changes using git_commit?' "
+        "Do NOT call `git_commit` without explicit user confirmation."
+    )
+
+
+@mcp.prompt(
+    name="commit_and_push_all",
+    description="Szybka ścieżka: dodaje wszystkie zmiany, tworzy commit i od razu wysyła na GitHuba (Push).",
+)
+def commit_and_push_all() -> str:
+    return (
+        "Task: Stage all changes, commit them, and push to the remote repository.\n\n"
+        "Strict Steps:\n"
+        "1. Call `git_status` to verify there are actually changes to commit.\n"
+        "2. If the working tree is clean, tell the user 'Nothing to commit' and stop.\n"
+        "3. Invent a brief, generic Conventional Commit message based on the changed file names (e.g., 'chore: update files' or 'fix: update calculator').\n"
+        "4. Call `git_commit` (leaving files_to_add as '.' to stage everything).\n"
+        "5. If the commit is successful, immediately call `git_push`.\n"
+        "6. STRICT RULE: Keep your text responses minimal. Just execute the tools."
+    )
+
+
+@mcp.prompt(
+    name="find_all_todos",
+    description="Wyszukuje wszystkie komentarze TODO w projekcie i wyświetla ich zwięzłą listę.",
+)
+def find_all_todos() -> str:
+    return (
+        "Task: Find all pending 'TODO' comments in the codebase.\n\n"
+        "Strict Steps:\n"
+        "1. Call `search_code` with the query 'TODO'.\n"
+        "2. If no TODOs are found, inform the user and stop.\n"
+        "3. If found, output a list of the files and line numbers containing TODOs. Include TODOs text description.\n"
+        "4. STRICT RULE: Do NOT call `read_file` on any of these files. Do NOT try to explain or fix them yet.\n"
+        "5. Conclude by asking the user: 'Which of these TODOs would you like me to investigate further?'"
+    )
+
+
+@mcp.tool(
+    name="search_code",
+    description=(
+        "Searches for a text pattern, keyword, or function name across project files. "
+        "Use this tool to locate where code is defined or referenced without reading files one by one."
+    ),
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
+)
+def search_code(
+    query: Annotated[
+        str,
+        Field(
+            description="The text or pattern to search for (e.g. 'def handle_click', 'TODO', 'DB_URL')."
+        ),
+    ],
+    path: Annotated[
+        str,
+        Field(
+            default=".",
+            description="Directory to search in. Use '.' for current workspace.",
+        ),
+    ] = ".",
+) -> str:
+    safe_args = WorkspaceManager.guard_arguments({"path": path})
+    return tools.search_code(query=query, **safe_args)
+
+
+@mcp.tool(
+    name="get_recent_commits",
+    description="Returns a brief list of the most recent Git commits (hash, date, title). Use this to check recent history, summarize work, or prepare standup notes.",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
+)
+def get_recent_commits(
+    count: Annotated[
+        int,
+        Field(
+            default=5,
+            description="Number of recent commits to fetch (1 to 20). Default is 5.",
+        ),
+    ] = 5,
+    repo_path: Annotated[
+        str,
+        Field(
+            default=".",
+            description="Path to Git repository. Use '.' for current directory.",
+        ),
+    ] = ".",
+) -> str:
+    safe_args = WorkspaceManager.guard_arguments({"repo_path": repo_path})
+    return tools.get_recent_commits(repo_path=safe_args["repo_path"], count=count)
+
+
+# Utworzenie aplikacji Starlette z trasami /sse oraz /messages/
+app = mcp.sse_app()
 
 if __name__ == "__main__":
     logger.info("Starting MCP server.")
-    uvicorn.run(starlette_app, host="127.0.0.1", port=8000)
+    uvicorn.run(
+        "mcp_server:app",
+        host="127.0.0.1",
+        port=8000,
+        reload=False,
+    )
