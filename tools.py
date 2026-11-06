@@ -405,6 +405,110 @@ def git_pull(repo_path: str = "."):
         raise ToolExecutionError(str(e))
 
 
+def git_init(repo_path: str = "."):
+    """Inicjalizuje puste repozytorium Git z główną gałęzią 'main'."""
+    logger.debug(f"git_init called for {repo_path}")
+    if not os.path.exists(repo_path):
+        os.makedirs(repo_path, exist_ok=True)
+    if not os.path.isdir(repo_path):
+        raise ToolExecutionError(f"Path '{repo_path}' is not a folder.")
+
+    try:
+        result = subprocess.run(
+            ["git", "init", "-b", "main"],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            check=True,
+            stdin=subprocess.DEVNULL,
+            timeout=10,
+        )
+        return f"--- Git init successful ---\n{result.stdout.strip()}\n--- End ---"
+    except subprocess.CalledProcessError as e:
+        raise ToolExecutionError(f"Git error: {e.stderr.strip() or e.stdout.strip()}")
+    except Exception as e:
+        raise ToolExecutionError(str(e))
+
+
+def github_repo_create(name: str, is_private: bool = False, repo_path: str = "."):
+    """
+    Tworzy nowe repozytorium na koncie GitHub i automatycznie podpina je
+    pod lokalny katalog jako 'origin'.
+    Wymaga zainstalowanego i zalogowanego narzędzia GitHub CLI (gh).
+    """
+    logger.debug(f"github_repo_create called for {name} in {repo_path}")
+
+    if not os.path.isdir(repo_path):
+        raise ToolExecutionError(f"Path '{repo_path}' is not a valid directory.")
+
+    visibility = "--private" if is_private else "--public"
+
+    try:
+        result = subprocess.run(
+            [
+                "gh",
+                "repo",
+                "create",
+                name,
+                visibility,
+                "--source=.",
+                "--remote=origin",
+                "--push",
+            ],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            check=True,
+            stdin=subprocess.DEVNULL,
+            timeout=20,
+        )
+
+        output = result.stderr.strip() if result.stderr else result.stdout.strip()
+        return (
+            f"--- GitHub Repo Creation Successful ---\n"
+            f"Name: {name} (Private: {is_private})\n"
+            f"Details: {output}\n"
+            f"Remote 'origin' has been added to the local repository.\n"
+            f"--- End ---"
+        )
+
+    except subprocess.CalledProcessError as e:
+        err_msg = e.stderr.strip() if e.stderr else e.stdout.strip()
+        raise ToolExecutionError(f"GitHub CLI error: {err_msg}")
+    except FileNotFoundError:
+        raise ToolExecutionError(
+            "'gh' command not found. Please install GitHub CLI and run 'gh auth login' on your system."
+        )
+    except subprocess.TimeoutExpired:
+        raise ToolExecutionError("GitHub API request exceeded time limit.")
+    except Exception as e:
+        raise ToolExecutionError(str(e))
+
+
+def git_clone(url: str, target_path: str = "."):
+    """Klonuje repozytorium do wskazanego folderu."""
+    logger.debug(f"git_clone called for {url} into {target_path}")
+
+    os.makedirs(target_path, exist_ok=True)
+
+    try:
+        result = subprocess.run(
+            ["git", "clone", url, "."],
+            cwd=target_path,
+            capture_output=True,
+            text=True,
+            check=True,
+            stdin=subprocess.DEVNULL,
+            timeout=60,
+        )
+        output = result.stderr.strip() if result.stderr else result.stdout.strip()
+        return f"--- Clone successful ---\n{output}\nRepozytorium sklonowane do: {target_path}\n--- End ---"
+    except subprocess.CalledProcessError as e:
+        raise ToolExecutionError(f"Git error: {e.stderr.strip() or e.stdout.strip()}")
+    except Exception as e:
+        raise ToolExecutionError(str(e))
+
+
 def git_undo_last_commit(repo_path: str = "."):
     """Undoes the last local commit while preserving all changes in the working directory (git reset HEAD~1)"""
     logger.debug("git_undo_last_commit called")

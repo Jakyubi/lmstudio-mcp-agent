@@ -231,6 +231,7 @@ def git_diff(
     name="git_commit",
     description=(
         "Stages files and creates a new Git commit. Only use this tool if the user asks you to commit changes to git. "
+        "There is no separate 'git add' tool. It is done automatically by this tool."
         "Always use a clear, descriptive commit message based on actual changes."
     ),
     annotations=ToolAnnotations(
@@ -313,6 +314,98 @@ def git_pull(
 ) -> str:
     safe_args = WorkspaceManager.guard_arguments({"repo_path": repo_path})
     return tools.git_pull(**safe_args)
+
+
+@mcp.tool(
+    name="git_init",
+    description="Initializes a new empty Git repository in the workspace. Use this to start a new project from scratch.",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=False,
+        openWorldHint=False,
+    ),
+)
+def git_init(
+    repo_path: Annotated[
+        str,
+        Field(
+            default=".",
+            description="Directory to initialize. Use '.' for current workspace.",
+        ),
+    ] = ".",
+) -> str:
+    safe_args = WorkspaceManager.guard_arguments({"repo_path": repo_path})
+    return tools.git_init(**safe_args)
+
+
+@mcp.tool(
+    name="github_repo_create",
+    description=(
+        "Creates a new repository on the user's GitHub account and links it to the local workspace. "
+        "Use this only when the user explicitly asks to create a new project on GitHub."
+    ),
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=True,  # Zatrzymuje pętlę dla zgody użytkownika
+        idempotentHint=False,
+        openWorldHint=True,  # Wskazuje na komunikację z zewnętrznym API
+    ),
+)
+def github_repo_create(
+    name: Annotated[
+        str,
+        Field(
+            description="Name of the new GitHub repository (e.g. 'my-cool-project')."
+        ),
+    ],
+    is_private: Annotated[
+        bool,
+        Field(
+            default=False, description="Set to True for private repo, False for public."
+        ),
+    ] = False,
+    repo_path: Annotated[
+        str,
+        Field(
+            default=".",
+            description="Path to local Git repository. Use '.' for current directory.",
+        ),
+    ] = ".",
+) -> str:
+    safe_args = WorkspaceManager.guard_arguments({"repo_path": repo_path})
+    return tools.github_repo_create(
+        name=name, is_private=is_private, repo_path=safe_args["repo_path"]
+    )
+
+
+@mcp.tool(
+    name="git_clone",
+    description=(
+        "Clones an existing remote repository from the internet into the workspace. "
+        "The downloaded code will be placed inside the target_path directory."
+    ),
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=False,
+        openWorldHint=True,
+    ),
+)
+def git_clone(
+    url: Annotated[
+        str, Field(description="The full URL of the Git repository to clone.")
+    ],
+    target_path: Annotated[
+        str,
+        Field(
+            description="Name of the new folder to clone into (e.g. 'my_project'). Never use absolute paths."
+        ),
+    ],
+) -> str:
+    # Używamy klucza "path" w guard_arguments, żeby odpowiednio zweryfikować target_path
+    safe_args = WorkspaceManager.guard_arguments({"path": target_path})
+    return tools.git_clone(url=url, target_path=safe_args["path"])
 
 
 @mcp.tool(
@@ -490,6 +583,35 @@ def get_recent_commits(
 ) -> str:
     safe_args = WorkspaceManager.guard_arguments({"repo_path": repo_path})
     return tools.get_recent_commits(repo_path=safe_args["repo_path"], count=count)
+
+
+@mcp.prompt(
+    name="init_and_publish_project",
+    description="Tworzy nowy projekt od zera, przygotowuje pliki startowe, robi initial commit i publikuje na GitHubie.",
+)
+def init_and_publish_project() -> str:
+    return (
+        "Task: Initialize a new project and publish it to GitHub.\n\n"
+        "=== STEP 0: VALIDATION (CRITICAL) ===\n"
+        "Check the conversation history. Do you know:\n"
+        "1. The exact repository name?\n"
+        "2. Whether it should be public or private?\n"
+        "3. What kind of project it is (e.g. Python, Node.js, empty)?\n\n"
+        "IF ANY OF THE ABOVE IS UNKNOWN:\n"
+        "- Do NOT call any tools. Zero tool calls allowed.\n"
+        "- Reply directly to the user asking for the missing details (e.g. 'Jak chcesz nazwać repozytorium na GitHubie i czy ma być prywatne, czy publiczne?').\n"
+        "- STOP your generation immediately and wait for the user's answer.\n\n"
+        "=== EXECUTION SEQUENCE (Only when all parameters are known) ===\n"
+        "Target directory rule: Use a subfolder matching the repo name (e.g. repo_path='my-repo') to avoid root folder pollution.\n"
+        "1. Call `git_init` with repo_path='<repo_name>'.\n"
+        "2. Call `write_file` to create initial files inside that subfolder:\n"
+        "   - '<repo_name>/.gitignore' (MUST NOT ignore itself or contain '.*')\n"
+        "   - '<repo_name>/README.md'\n"
+        "   - '<repo_name>/main.py' (or appropriate starter file)\n"
+        "3. Call `git_commit` with repo_path='<repo_name>', message='feat: initial commit', files_to_add='.' (DO NOT call git_add, staging is automatic).\n"
+        "4. Call `github_repo_create` with repo_path='<repo_name>', name='<repo_name>', is_private=<bool>.\n"
+        "5. Report the final repository URL to the user."
+    )
 
 
 # Utworzenie aplikacji Starlette z trasami /sse oraz /messages/
