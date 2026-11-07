@@ -23,6 +23,9 @@ logger = logging.getLogger(__name__)
 mcp = FastMCP("mcp-server")
 
 
+# MCP TOOLS
+
+
 @mcp.tool(
     name="get_current_datetime",
     description="Returns current date and time.",
@@ -403,7 +406,6 @@ def git_clone(
         ),
     ],
 ) -> str:
-    # Używamy klucza "path" w guard_arguments, żeby odpowiednio zweryfikować target_path
     safe_args = WorkspaceManager.guard_arguments({"path": target_path})
     return tools.git_clone(url=url, target_path=safe_args["path"])
 
@@ -431,103 +433,17 @@ def git_undo_last_commit(
     return tools.git_undo_last_commit(**safe_args)
 
 
-@mcp.prompt(
-    name="project_context_refresher",
-    description="Reminds what was recently done in the project.",
-)
-def project_context_refresher() -> str:
-    return (
-        "Task: Provide a quick refresher on what was recently done in this project and its current state.\n\n"
-        "Strict Steps:\n"
-        "1. Call `get_recent_commits` with count=7 to fetch the recent history.\n"
-        "2. Call `git_status` to check if there are any uncommitted changes left behind.\n"
-        "3. Output a concise summary with two sections:\n"
-        "   - **Recent Activity**: A bulleted summary of the main features/fixes recently added to the project.\n"
-        "   - **Current State**: Briefly list what is currently modified, untracked, or state that the working tree is clean.\n"
-        "4. Keep it brief, factual, and do not call `read_file` or `git_diff`.\n"
-        "5. Conclude by asking: 'What would you like to work on next?'"
-    )
-
-
-@mcp.prompt(
-    name="pre_commit_check",
-    description="Pre-commit audit: checks for leftover debugging artifacts, secrets, and repository clutter.",
-)
-def pre_commit_check() -> str:
-    return (
-        "Perform a pre-commit code check. Follow these steps in sequence:\n\n"
-        "1. Call `git_status` to inspect modified and untracked files.\n"
-        "2. Check untracked files for artifacts that should NOT be committed (e.g., *.log files, *.env secrets, temp files). "
-        "Warn the user explicitly if any suspicious files are found.\n"
-        "3. Call `git_diff` to inspect modified code lines.\n"
-        "4. Scan the diff for leftover debugging artifacts:\n"
-        "   - Print/logging statements: print(), console.log(), breakpoint(), pdb, debugger;\n"
-        "   - Large blocks of commented-out, dead code.\n"
-        "5. Output a clean, structured checklist:\n"
-        "   - [ ] Repository Hygiene (Staged files vs untracked clutter)\n"
-        "   - [ ] Leftover Debug / Dead Code (Specify file and line, or state 'Clean')\n"
-        "   - [ ] Summary (2 sentences explaining what this change actually does)."
-    )
-
-
-@mcp.prompt(
-    name="prepare_conventional_commit",
-    description="Inspects diff and prepares a standardized Conventional Commit message.",
-)
-def prepare_conventional_commit() -> str:
-    return (
-        "Your task is to prepare a professional commit message following the Conventional Commits specification.\n\n"
-        "Execute these steps in sequence:\n"
-        "1. Call `git_status` to verify if there are any modified or staged files. "
-        "If the working tree is clean, inform the user and stop.\n"
-        "2. Call `git_diff` to fetch all uncommitted changes.\n"
-        "3. Analyze the diff to understand the main intent behind the changes (what was changed and why).\n"
-        "4. Propose a concise commit title in the format: `<type>(<optional-scope>): <imperative summary>` "
-        "(e.g., feat: add error handling, fix: prevent path traversal, refactor: streamline git calls).\n"
-        "5. Provide 2-3 concise bullet points explaining key changes.\n"
-        "6. Conclude by asking: 'Would you like me to commit these changes using git_commit?' "
-        "Do not call `git_commit` without explicit user confirmation."
-    )
-
-
-@mcp.prompt(
-    name="commit_and_push_all",
-    description="Stages all changes, creates a commit and pushes it to Github.",
-)
-def commit_and_push_all() -> str:
-    return (
-        "Task: Stage all changes, commit them, and push to the remote repository.\n\n"
-        "Strict Steps:\n"
-        "1. Call `git_status` to verify there are actually changes to commit.\n"
-        "2. If the working tree is clean, tell the user 'Nothing to commit' and stop.\n"
-        "3. Invent a brief, generic Conventional Commit message based on the changed file names (e.g., 'chore: update files' or 'fix: update calculator').\n"
-        "4. Call `git_commit` (leaving files_to_add as '.' to stage everything).\n"
-        "5. If the commit is successful, immediately call `git_push`.\n"
-        "6. Keep your text responses minimal. Just execute the tools."
-    )
-
-
-@mcp.prompt(
-    name="find_all_todos",
-    description="Searches for TODOs in the project and lists them.",
-)
-def find_all_todos() -> str:
-    return (
-        "Task: Find all pending 'TODO' comments in the codebase.\n\n"
-        "Strict Steps:\n"
-        "1. Call `search_code` with the query 'TODO'.\n"
-        "2. If no TODOs are found, inform the user and stop.\n"
-        "3. If found, output a list of the files and line numbers containing TODOs. Include TODOs text description.\n"
-        "4. Do not call `read_file` on any of these files. Do not try to explain or fix them yet.\n"
-        "5. Conclude by asking the user: 'Which of these TODOs would you like me to investigate further?'"
-    )
-
-
 @mcp.tool(
     name="search_code",
     description=(
         "Searches for a text pattern, keyword, or function name across project files. "
         "Use this tool to locate where code is defined or referenced without reading files one by one."
+    ),
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
     ),
 )
 def search_code(
@@ -552,6 +468,12 @@ def search_code(
 @mcp.tool(
     name="get_recent_commits",
     description="Returns a brief list of the most recent Git commits (hash, date, title). Use this to check recent history, summarize work, or prepare standup notes.",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
 )
 def get_recent_commits(
     count: Annotated[
@@ -573,35 +495,128 @@ def get_recent_commits(
     return tools.get_recent_commits(repo_path=safe_args["repo_path"], count=count)
 
 
+# MCP PROMPTS
+
+
+@mcp.prompt(
+    name="project_context_refresher",
+    description="Reminds what was recently done in the project.",
+)
+def project_context_refresher() -> str:
+    return (
+        "Provide a quick refresher on what was recently done in this project and its current state.\n\n"
+        "Steps:\n"
+        "1. Call `get_recent_commits` with chosen count to fetch the recent history.\n"
+        "2. Call `git_status` to check if there are any uncommitted changes left behind.\n"
+        "3. Output a concise summary with two sections:\n"
+        "   - **Recent Activity**: A bulleted summary of the main features/fixes recently added to the project.\n"
+        "   - **Current State**: Brief list of what is currently modified, untracked, or state that the working tree is clean.\n"
+        "4. Keep it brief, and do not call `read_file` or `git_diff`.\n"
+        "5. Conclude by asking user about next steps"
+    )
+
+
+@mcp.prompt(
+    name="pre_commit_check",
+    description="Pre-commit audit: checks for leftover debugging artifacts, secrets, and repository clutter.",
+)
+def pre_commit_check() -> str:
+    return (
+        "Perform repository check.\n\n"
+        "Steps:\n"
+        "1. Call `git_status` to inspect modified and untracked files.\n"
+        "2. Check untracked files for artifacts that should not be committed (e.g., *.log files, *.env, temp files). "
+        "Warn the user if any suspicious files are found.\n"
+        "3. Call `git_diff` to inspect modified code lines.\n"
+        "4. Scan the diff for leftover debugging artifacts, do not call 'read_file' or 'scan_code'\n"
+        "5. Output a clean, structured checklist:\n"
+        "   - Repository Hygiene (Staged files vs untracked clutter)\n"
+        "   - Leftover Debug / Dead Code (Specify file and line, or state 'Clean')\n"
+        "   - Summary (2 sentences explaining what this change actually does)."
+    )
+
+
+@mcp.prompt(
+    name="prepare_conventional_commit",
+    description="Inspects diff and prepares a standardized Conventional Commit message.",
+)
+def prepare_conventional_commit() -> str:
+    return (
+        "Prepare a professional commit message following the Conventional Commits specification.\n\n"
+        "Steps:\n"
+        "1. Call `git_status` to verify if there are any modified or staged files. "
+        "If the working tree is clean, inform the user and stop.\n"
+        "2. Call `git_diff` to fetch all uncommitted changes.\n"
+        "3. Analyze the diff to understand the main intent behind the changes.\n"
+        "4. Propose a concise commit title in the format: `<type>: <summary>` "
+        "(e.g., feat: add error handling, fix: prevent path traversal, refactor: streamline git calls).\n"
+        "5. Provide 2-3 concise bullet points explaining key changes.\n"
+        "6. Conclude by asking: 'Would you like me to commit these changes using git_commit?' "
+        "Do not call `git_commit` without explicit user confirmation."
+    )
+
+
+@mcp.prompt(
+    name="commit_and_push_all",
+    description="Stages all changes, creates a commit and pushes it to Github.",
+)
+def commit_and_push_all() -> str:
+    return (
+        "Stage all changes, commit them, and push to the remote repository.\n\n"
+        "Steps:\n"
+        "1. Call `git_status` to verify there are actually changes to commit.\n"
+        "2. If the working tree is clean, tell the user 'Nothing to commit' and stop.\n"
+        "3. Invent a brief, generic Conventional Commit message based on the changed file names (e.g., 'chore: update files' or 'fix: update calculator').\n"
+        "4. Call `git_commit` (if you want to stage everything leave files_to_add as '.').\n"
+        "5. If the commit is successful, immediately call `git_push`.\n"
+        "6. Keep your text responses minimal. Just execute the tools."
+    )
+
+
+@mcp.prompt(
+    name="find_all_todos",
+    description="Searches for TODOs in the project and lists them.",
+)
+def find_all_todos() -> str:
+    return (
+        "Find all 'TODO' comments in the codebase.\n\n"
+        "Steps:\n"
+        "1. Call `search_code` with the query 'TODO'.\n"
+        "2. If no TODOs are found, inform the user and stop.\n"
+        "3. If found, output a list of the files and line numbers containing TODOs. Include TODOs text description.\n"
+        "4. Do not call `read_file` on any of these files. Do not try to explain or fix them yet.\n"
+        "5. Conclude by asking the user: 'Which of these TODOs would you like me to investigate further?'"
+    )
+
+
 @mcp.prompt(
     name="init_and_publish_project",
     description="Creates a new project from scratch, prepares start files, makes an initial commit, publishes to GitHub.",
 )
 def init_and_publish_project() -> str:
     return (
-        "Task: Initialize a new project and publish it to GitHub.\n\n"
-        "=== STEP 0: VALIDATION (CRITICAL) ===\n"
+        "Initialize a new project and publish it to GitHub.\n\n"
+        "Steps:\n"
         "Check the conversation history. Do you know:\n"
         "1. The exact repository name?\n"
         "2. Whether it should be public or private?\n"
-        "3. What kind of project it is (e.g. Python, Node.js, empty)?\n\n"
-        "IF ANY OF THE ABOVE IS UNKNOWN:\n"
-        "- Do NOT call any tools. Zero tool calls allowed.\n"
-        "- Reply directly to the user asking for the missing details (e.g. 'Jak chcesz nazwać repozytorium na GitHubie i czy ma być prywatne, czy publiczne?').\n"
-        "- STOP your generation immediately and wait for the user's answer.\n\n"
-        "=== EXECUTION SEQUENCE (Only when all parameters are known) ===\n"
-        "Target directory rule: Use a subfolder matching the repo name (e.g. repo_path='my-repo') to avoid root folder pollution.\n"
+        "3. What kind of project it is?\n\n"
+        "If any of above is unknown:\n"
+        "- Do not call any tools.\n"
+        "- Reply directly to the user asking for the missing details (e.g. About name and private/public stauts).\n"
+        "- Stop your generation immediately and wait for the user's answer.\n\n"
+        "When all parameters are known:\n"
+        "Target directory rule: Use a subfolder matching the repo name.\n"
         "1. Call `git_init` with repo_path='<repo_name>'.\n"
         "2. Call `write_file` to create initial files inside that subfolder:\n"
         "   - '<repo_name>/.gitignore' (Must be empty)\n"
         "   - '<repo_name>/README.md'\n"
         "3. Call `git_commit` with repo_path='<repo_name>', message='feat: initial commit', files_to_add='.' (DO NOT call git_add, staging is automatic).\n"
         "4. Call `github_repo_create` with repo_path='<repo_name>', name='<repo_name>', is_private=<bool>.\n"
-        "5. Report the final repository URL to the user."
+        "5. Report the final repository URL to the user, remind them to change workspace to match new folder"
     )
 
 
-# Utworzenie aplikacji Starlette z trasami /sse oraz /messages/
 app = mcp.sse_app()
 
 if __name__ == "__main__":

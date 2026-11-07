@@ -496,7 +496,7 @@ def git_clone(url: str, target_path: str = "."):
             timeout=60,
         )
         output = result.stderr.strip() if result.stderr else result.stdout.strip()
-        return f"--- Clone successful ---\n{output}\nRepozytorium sklonowane do: {target_path}\n--- End ---"
+        return f"--- Clone successful ---\n{output}\nRepo cloned to: {target_path}\n--- End ---"
     except subprocess.CalledProcessError as e:
         raise ToolExecutionError(f"Git error: {e.stderr.strip() or e.stdout.strip()}")
     except Exception as e:
