@@ -43,16 +43,13 @@ class WorkspaceManager:
     def _verify_path(
         cls, current_ws: Path, raw_val: any, allow_empty: bool = False
     ) -> Path:
-        """
-        Weryfikuje i rozwiązuje pojedynczą ścieżkę.
-        Chroni przed Path Traversal oraz bezpośrednim dostępem do .git.
-        """
+        """Verifies and resolves a single path."""
         raw_str = str(raw_val).strip() if raw_val is not None else ""
 
         if not raw_str:
             if allow_empty:
                 return current_ws
-            raise ValueError("Ścieżka nie może być pusta.")
+            raise ValueError("Path cannot be empty.")
 
         raw_path = Path(raw_str)
         resolved = (

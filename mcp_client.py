@@ -10,7 +10,7 @@ from mcp.types import Tool
 logger = logging.getLogger(__name__)
 
 
-class PersistentMCPClient:
+class MCPClient:
     """Manages long-lived SSE transport and MCP session in a background daemon thread."""
 
     def __init__(self, sse_url: str = "http://127.0.0.1:8000/sse"):
@@ -25,10 +25,10 @@ class PersistentMCPClient:
         self._thread = threading.Thread(target=self._run_loop, daemon=True)
         self._thread.start()
 
-        logger.info(f"Connecting persistent MCP client to {sse_url}...")
+        logger.info(f"Connecting MCP client to {sse_url}...")
         future = asyncio.run_coroutine_threadsafe(self._connect(), self.loop)
         future.result(timeout=15.0)
-        logger.info("Persistent MCP Client initialized successfully.")
+        logger.info("MCP Client initialized successfully.")
 
     def _run_loop(self):
         asyncio.set_event_loop(self.loop)
@@ -69,7 +69,7 @@ class PersistentMCPClient:
         return future.result(timeout=60.0)
 
     def list_prompts(self) -> list[Any]:
-        """Pobiera listę dostępnych szablonów Prompt z serwera MCP."""
+        """Fetches the list of available Prompt templates from MCP server."""
         if not self.session:
             return []
 
@@ -81,7 +81,7 @@ class PersistentMCPClient:
         return future.result(timeout=10.0)
 
     def get_prompt(self, name: str, arguments: dict[str, Any] | None = None) -> str:
-        """Pobiera treść promptu z serwera i scala wiadomości w pojedynczy ciąg tekstowy."""
+        """Fetches prompt content from the server."""
         if not self.session:
             raise RuntimeError("MCP Session is not active.")
 

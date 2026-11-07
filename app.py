@@ -8,7 +8,7 @@ import streamlit as st
 from dotenv import load_dotenv
 from openai import OpenAI
 
-from mcp_client import PersistentMCPClient
+from mcp_client import MCPClient
 from workspace import WorkspaceManager
 
 # Logging configuration
@@ -34,9 +34,9 @@ client = OpenAI(base_url=BASE_URL, api_key=API_KEY, timeout=200.0)
 
 
 @st.cache_resource
-def get_mcp_client() -> PersistentMCPClient:
+def get_mcp_client() -> MCPClient:
     """Creates and retains a single MCP client throughout the Streamlit app lifecycle."""
-    return PersistentMCPClient(MCP_SERVER_URL)
+    return MCPClient(MCP_SERVER_URL)
 
 
 mcp_client = get_mcp_client()
@@ -290,7 +290,7 @@ def is_tool_critical(tool_name: str) -> bool:
 
 
 def get_lmstudio_model_info():
-    """Pobiera informacje o aktualnie załadowanym modelu z LM Studio (API v0)."""
+    """Gets informations about currently loaded model from LM Studio."""
     base_uri = urllib.parse.urlparse(BASE_URL)
     api_url = f"{base_uri.scheme}://{base_uri.netloc}/api/v0/models"
 
@@ -302,7 +302,7 @@ def get_lmstudio_model_info():
                 return data["data"][0]
         return None
     except requests.RequestException:
-        logger.warning("Nie można pobrać informacji o modelu z /api/v0/models")
+        logger.warning("Couldn't fetch info about model from /api/v0/models")
         return None
 
 
@@ -313,8 +313,8 @@ with st.expander("Stats", expanded=False):
     model_info = get_lmstudio_model_info()
 
     if model_info:
-        model_name = model_info.get("id", "Nieznany model")
-        quantization = model_info.get("quantization", "Brak")
+        model_name = model_info.get("id", "Unknonwn model")
+        quantization = model_info.get("quantization", "N/A")
         max_context = model_info.get("loaded_context_length", 0)
 
         col1, col2, col3 = st.columns(3)
@@ -323,11 +323,11 @@ with st.expander("Stats", expanded=False):
             st.markdown("Model name:")
             st.markdown(f"{model_name}")
         with col2:
-            st.markdown("Kwantyzacja:")
+            st.markdown("Quantization:")
             st.markdown(f"{quantization}")
         with col3:
             current_tokens = st.session_state.get("last_prompt_tokens", 0)
-            st.write("Zużycie kontekstu: ")
+            st.write("Context used: ")
             if current_tokens > 0:
                 if max_context > 0:
                     progress_val = min(current_tokens / max_context, 1.0)
@@ -335,33 +335,33 @@ with st.expander("Stats", expanded=False):
                 else:
                     st.write(f"{current_tokens} t")
             else:
-                st.write("czekanie na zapytanie")
+                st.write("Waiting for prompt")
     else:
-        st.error("Nie wykryto model")
+        st.error("Model not detected")
 
 # Sidebar with user tools (clear chat/logs)
 with st.sidebar:
     st.header("Settings")
 
     current_ws = str(WorkspaceManager.get_workspace())
-    target_ws = st.text_input("Folder roboczy:", value=current_ws)
+    target_ws = st.text_input("Workspace folder:", value=current_ws)
 
-    if st.button("Zastosuj folder", use_container_width=True):
+    if st.button("Apply workspace", use_container_width=True):
         try:
             applied = WorkspaceManager.set_workspace(target_ws)
             st.session_state.history = []
             st.session_state.pending_action = None
-            st.success(f"Ustawiono: {applied.name}")
+            st.success(f"Set to: {applied.name}")
             st.rerun()
         except Exception as e:
-            st.error(f"Błąd: {e}")
+            st.error(f"Error: {e}")
 
-    st.caption("Aktualnie aktywna ścieżka:")
+    st.caption("Currently active path:")
     st.caption(current_ws)
 
     st.divider()
-    st.header("Szablony MCP (Prompts)")
-    st.caption("Kliknij, aby uruchomić gotowy scenariusz:")
+    st.header("MCP Prompts")
+    st.caption("Click to run:")
 
     is_busy = (
         st.session_state.get("pending_action") is not None
@@ -378,31 +378,29 @@ with st.sidebar:
                 st.session_state.pending_prompt_text = prompt_body
                 st.rerun()
             except Exception as e:
-                st.error(f"Błąd ładowania promptu: {e}")
+                st.error(f"Error loading prompt: {e}")
 
     st.divider()
 
     st.toggle(
-        "Wymagaj potwierdzeń (HITL)",
+        "Require confirmations",
         value=True,
         key="hitl_enabled",
-        help="Gdy włączone, agent wymaga akceptacji przed wykonaniem operacji modyfikujących (zapis plików, commity, push).",
+        help="When enabled, agent requires approval before executing potentially dangerous tools.",
         disabled=(st.session_state.get("pending_action") is not None),
     )
 
     if not st.session_state.get("hitl_enabled", True):
-        st.warning(
-            "Tryb autonomiczny: Agent wykonuje wszystkie operacje bez pytania o zgodę."
-        )
+        st.warning("Agent executes all tools without asking for permission.")
 
     st.divider()
-    with st.expander("Dostępne narzędzia", expanded=False):
+    with st.expander("Available tools", expanded=False):
         if mcp_client.tools:
             for tool in mcp_client.tools:
                 with st.expander(f"{tool.name}"):
                     st.write(tool.description)
         else:
-            st.warning("Brak załadowanych narzędzi.")
+            st.warning("No tools loaded.")
 
     st.divider()
 
@@ -498,29 +496,27 @@ if st.session_state.pending_action:
 
     st.markdown("---")
     with st.container(border=True):
-        st.error(f"**Wymagana autoryzacja operacji:** `{action['name']}`")
-        st.write("Sprawdź parametry przed zatwierdzeniem: ")
+        st.error(f"**Autorization needed:** `{action['name']}`")
+        st.write("Check parameters: ")
 
         if action["name"] == "git_commit":
-            st.info(f"**Wiadomość commita:** {action['args'].get('message')}")
+            st.info(f"**Commit message:** {action['args'].get('message')}")
             st.caption(
-                f"Pliki: `{action['args'].get('files_to_add', '.')}` | Ścieżka: `{action['args'].get('repo_path', '.')}`"
+                f"Files: `{action['args'].get('files_to_add', '.')}` | Path: `{action['args'].get('repo_path', '.')}`"
             )
         elif action["name"] == "write_file":
-            st.info(f"**Plik:** `{action['args'].get('file_path')}`")
+            st.info(f"**File:** `{action['args'].get('file_path')}`")
             st.code(action["args"].get("content", ""), language="python")
         else:
             st.json(action["args"])
 
         col1, col2 = st.columns([1, 4])
         with col1:
-            if st.button(
-                "Zatwierdź i wykonaj", type="primary", use_container_width=True
-            ):
+            if st.button("Approve", type="primary", use_container_width=True):
                 handle_pending_action(approved=True)
                 st.rerun()
         with col2:
-            if st.button("Odrzuć operację", use_container_width=True):
+            if st.button("Reject", use_container_width=True):
                 handle_pending_action(approved=False)
                 st.rerun()
 
@@ -528,9 +524,9 @@ if st.session_state.pending_action:
 # Block input while waiting for user decision
 is_waiting_for_approval = st.session_state.pending_action is not None
 prompt_placeholder = (
-    "Wymagana decyzja powyżej..."
+    "Decision required..."
     if is_waiting_for_approval
-    else "Wpisz polecenie dla asystenta..."
+    else "Enter prompt for assistant..."
 )
 
 

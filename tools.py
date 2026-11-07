@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 class ToolExecutionError(Exception):
-    """Wyjątek rzucany w przypadku kontrolowanego błędu wykonania narzędzia."""
+    """Exception raised for controlled tool execution errors."""
 
 
 def get_current_datetime():
@@ -20,10 +20,10 @@ def get_current_datetime():
 
 
 def list_directory(path: str = ".", max_depth: int = 2):
-    """Zwraca strukturę katalogów w formie czytelnego drzewa."""
+    """Returns directory structure in a readable tree format."""
     root = Path(path).resolve()
     if not root.is_dir():
-        raise ToolExecutionError(f"Ścieżka '{path}' nie jest folderem.")
+        raise ToolExecutionError(f"Path '{path}' is not a directory.")
 
     lines = []
     MAX_FILES_PER_DIR = 20
@@ -45,7 +45,7 @@ def list_directory(path: str = ".", max_depth: int = 2):
 
             for d in dirs:
                 if d.name.startswith((".", "$", "__")) or d.name == "node_modules":
-                    lines.append(f"{indent}  [DIR] {d.name}/ (zwinięty folder)")
+                    lines.append(f"{indent}  [DIR] {d.name}/ (collapsed folder)")
                 else:
                     walk(d, current_depth + 1)
 
@@ -54,7 +54,7 @@ def list_directory(path: str = ".", max_depth: int = 2):
 
             hidden_count = len(files) - MAX_FILES_PER_DIR
             if hidden_count > 0:
-                lines.append(f"{indent}  ... [i {hidden_count} innych plików]")
+                lines.append(f"{indent}  ... [and {hidden_count} other files]")
 
         except PermissionError:
             lines.append(f"{indent}  [LOCK]")
@@ -76,7 +76,7 @@ def read_file(file_path: str):
             content = f.read(10000)
             truncated = ""
             if f.read(1):
-                truncated = "\n... [TRUNCATED] Plik jest zbyt długi, ucięto wynik."
+                truncated = "\n... [TRUNCATED] File is too long, output truncated."
 
             if not content.strip():
                 return f"File '{file_path}' is empty"
@@ -153,7 +153,6 @@ def rename_file(old_path: str, new_path: str):
     if not os.path.exists(old_path):
         raise ToolExecutionError(f"File '{old_path}' does not exist.")
 
-    # Jeśli ścieżka docelowa wskazuje na istniejący katalog, przenieś plik do jego wnętrza
     if os.path.isdir(new_path):
         new_path = os.path.join(new_path, os.path.basename(old_path))
 
@@ -161,7 +160,6 @@ def rename_file(old_path: str, new_path: str):
         raise ToolExecutionError(f"Destination '{new_path}' already exists.")
 
     try:
-        # Automatyczne utworzenie brakujących katalogów nadrzędnych
         dest_dir = os.path.dirname(new_path)
         if dest_dir and not os.path.exists(dest_dir):
             os.makedirs(dest_dir, exist_ok=True)
@@ -406,7 +404,7 @@ def git_pull(repo_path: str = "."):
 
 
 def git_init(repo_path: str = "."):
-    """Inicjalizuje puste repozytorium Git z główną gałęzią 'main'."""
+    """Initializes an empty Git repository with 'main' as the default branch."""
     logger.debug(f"git_init called for {repo_path}")
     if not os.path.exists(repo_path):
         os.makedirs(repo_path, exist_ok=True)
@@ -431,11 +429,7 @@ def git_init(repo_path: str = "."):
 
 
 def github_repo_create(name: str, is_private: bool = False, repo_path: str = "."):
-    """
-    Tworzy nowe repozytorium na koncie GitHub i automatycznie podpina je
-    pod lokalny katalog jako 'origin'.
-    Wymaga zainstalowanego i zalogowanego narzędzia GitHub CLI (gh).
-    """
+    """Creates a new repository on the GitHub account and links it to the local directory"""
     logger.debug(f"github_repo_create called for {name} in {repo_path}")
 
     if not os.path.isdir(repo_path):
@@ -486,7 +480,7 @@ def github_repo_create(name: str, is_private: bool = False, repo_path: str = "."
 
 
 def git_clone(url: str, target_path: str = "."):
-    """Klonuje repozytorium do wskazanego folderu."""
+    """Clones a repository into the specified directory."""
     logger.debug(f"git_clone called for {url} into {target_path}")
 
     os.makedirs(target_path, exist_ok=True)

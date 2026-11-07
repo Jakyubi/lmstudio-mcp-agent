@@ -152,7 +152,7 @@ def delete_file(
 @mcp.tool(
     name="rename_file",
     description=(
-        "Renames a specified file. Will automaticly create missing folders if needed"
+        "Renames a specified file. Will automaticaly create missing folders if needed"
         "Only use this tool if the user explicitly asks to rename, or move file to other folder. "
         "Never rename files automatically without a clear user request."
     ),
@@ -347,9 +347,9 @@ def git_init(
     ),
     annotations=ToolAnnotations(
         readOnlyHint=False,
-        destructiveHint=True,  # Zatrzymuje pętlę dla zgody użytkownika
+        destructiveHint=True,
         idempotentHint=False,
-        openWorldHint=True,  # Wskazuje na komunikację z zewnętrznym API
+        openWorldHint=True,
     ),
 )
 def github_repo_create(
@@ -433,7 +433,7 @@ def git_undo_last_commit(
 
 @mcp.prompt(
     name="project_context_refresher",
-    description="Przypomina, co było ostatnio robione w projekcie i jaki jest obecny stan plików.",
+    description="Reminds what was recently done in the project.",
 )
 def project_context_refresher() -> str:
     return (
@@ -492,7 +492,7 @@ def prepare_conventional_commit() -> str:
 
 @mcp.prompt(
     name="commit_and_push_all",
-    description="Szybka ścieżka: dodaje wszystkie zmiany, tworzy commit i od razu wysyła na GitHuba (Push).",
+    description="Stages all changes, creates a commit and pushes it to Github.",
 )
 def commit_and_push_all() -> str:
     return (
@@ -509,7 +509,7 @@ def commit_and_push_all() -> str:
 
 @mcp.prompt(
     name="find_all_todos",
-    description="Wyszukuje wszystkie komentarze TODO w projekcie i wyświetla ich zwięzłą listę.",
+    description="Searches for TODOs in the project and lists them.",
 )
 def find_all_todos() -> str:
     return (
@@ -528,12 +528,6 @@ def find_all_todos() -> str:
     description=(
         "Searches for a text pattern, keyword, or function name across project files. "
         "Use this tool to locate where code is defined or referenced without reading files one by one."
-    ),
-    annotations=ToolAnnotations(
-        readOnlyHint=True,
-        destructiveHint=False,
-        idempotentHint=True,
-        openWorldHint=False,
     ),
 )
 def search_code(
@@ -558,12 +552,6 @@ def search_code(
 @mcp.tool(
     name="get_recent_commits",
     description="Returns a brief list of the most recent Git commits (hash, date, title). Use this to check recent history, summarize work, or prepare standup notes.",
-    annotations=ToolAnnotations(
-        readOnlyHint=True,
-        destructiveHint=False,
-        idempotentHint=True,
-        openWorldHint=False,
-    ),
 )
 def get_recent_commits(
     count: Annotated[
@@ -587,7 +575,7 @@ def get_recent_commits(
 
 @mcp.prompt(
     name="init_and_publish_project",
-    description="Tworzy nowy projekt od zera, przygotowuje pliki startowe, robi initial commit i publikuje na GitHubie.",
+    description="Creates a new project from scratch, prepares start files, makes an initial commit, publishes to GitHub.",
 )
 def init_and_publish_project() -> str:
     return (
@@ -605,9 +593,8 @@ def init_and_publish_project() -> str:
         "Target directory rule: Use a subfolder matching the repo name (e.g. repo_path='my-repo') to avoid root folder pollution.\n"
         "1. Call `git_init` with repo_path='<repo_name>'.\n"
         "2. Call `write_file` to create initial files inside that subfolder:\n"
-        "   - '<repo_name>/.gitignore' (MUST NOT ignore itself or contain '.*')\n"
+        "   - '<repo_name>/.gitignore' (Must be empty)\n"
         "   - '<repo_name>/README.md'\n"
-        "   - '<repo_name>/main.py' (or appropriate starter file)\n"
         "3. Call `git_commit` with repo_path='<repo_name>', message='feat: initial commit', files_to_add='.' (DO NOT call git_add, staging is automatic).\n"
         "4. Call `github_repo_create` with repo_path='<repo_name>', name='<repo_name>', is_private=<bool>.\n"
         "5. Report the final repository URL to the user."
