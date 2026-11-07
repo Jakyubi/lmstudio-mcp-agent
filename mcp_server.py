@@ -133,7 +133,7 @@ def write_file(
     name="delete_file",
     description=(
         "Deletes a specified file from the filesystem. "
-        "ONLY use this tool if the user explicitly asks to delete, remove, or trash a file. "
+        "Only use this tool if the user asks to delete, remove, or trash a file."
         "Never delete files automatically without a clear user request."
     ),
     annotations=ToolAnnotations(
@@ -346,7 +346,7 @@ def git_init(
     name="github_repo_create",
     description=(
         "Creates a new repository on the user's GitHub account and links it to the local workspace. "
-        "Use this only when the user explicitly asks to create a new project on GitHub."
+        "Use this only when the user asks to create a new project on GitHub."
     ),
     annotations=ToolAnnotations(
         readOnlyHint=False,
@@ -517,10 +517,10 @@ def project_context_refresher() -> str:
 
 
 @mcp.prompt(
-    name="pre_commit_check",
-    description="Pre-commit audit: checks for leftover debugging artifacts, secrets, and repository clutter.",
+    name="repository_check",
+    description="Repository_check audit: checks for leftover debugging artifacts, secrets, and repository clutter.",
 )
-def pre_commit_check() -> str:
+def repository_check() -> str:
     return (
         "Perform repository check.\n\n"
         "Steps:\n"
@@ -595,15 +595,16 @@ def find_all_todos() -> str:
 )
 def init_and_publish_project() -> str:
     return (
-        "Initialize a new project and publish it to GitHub.\n\n"
+        "Initialize a new project and optionally publish it to GitHub.\n\n"
         "Steps:\n"
         "Check the conversation history. Do you know:\n"
         "1. The exact repository name?\n"
-        "2. Whether it should be public or private?\n"
-        "3. What kind of project it is?\n\n"
+        "2. What kind of project it is?\n\n"
+        "3. Whether it should be published on GitHub?\n"
+        "4. Whether it should be public or private?\n"
         "If any of above is unknown:\n"
         "- Do not call any tools.\n"
-        "- Reply directly to the user asking for the missing details (e.g. About name and private/public stauts).\n"
+        "- Reply directly to the user asking for the missing details.\n"
         "- Stop your generation immediately and wait for the user's answer.\n\n"
         "When all parameters are known:\n"
         "Target directory rule: Use a subfolder matching the repo name.\n"
@@ -612,8 +613,13 @@ def init_and_publish_project() -> str:
         "   - '<repo_name>/.gitignore' (Must be empty)\n"
         "   - '<repo_name>/README.md'\n"
         "3. Call `git_commit` with repo_path='<repo_name>', message='feat: initial commit', files_to_add='.' (DO NOT call git_add, staging is automatic).\n"
-        "4. Call `github_repo_create` with repo_path='<repo_name>', name='<repo_name>', is_private=<bool>.\n"
-        "5. Report the final repository URL to the user, remind them to change workspace to match new folder"
+        "4. If the user confirmed they want to publish to GitHub:\n"
+        "   - Call `github_repo_create` with repo_path='<repo_name>', name='<repo_name>', is_private=<bool>.\n"
+        "   - Report the final repository URL to the user.\n"
+        "5. If the user declined or publishing to GitHub or it is still unknown:\n"
+        "   - Do not call `github_repo_create`.\n"
+        "   - Inform the user that the local repository is ready.\n"
+        "5. Remind user to change workspace to match new folder"
     )
 
 

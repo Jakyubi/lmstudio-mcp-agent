@@ -330,8 +330,16 @@ with st.sidebar:
     if st.button("Apply workspace", use_container_width=True):
         try:
             applied = WorkspaceManager.set_workspace(target_ws)
-            st.session_state.history = []
             st.session_state.pending_action = None
+
+            if st.session_state.get("history"):
+                st.session_state.history.append(
+                    {
+                        "role": "user",
+                        "content": f"[WORKSPACE CHANGED]: The working directory is now set to '{applied}'. "
+                        "All tool operations and file paths will be relative to this folder.",
+                    }
+                )
             st.success(f"Set to: {applied.name}")
             st.rerun()
         except Exception as e:
