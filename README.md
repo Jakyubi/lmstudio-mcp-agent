@@ -168,3 +168,11 @@ _(Przeglądarka otworzy się automatycznie pod adresem `http://localhost:8501`).
 
 - **Przyczyna:** Prawdopodobnie inna aplikacja zajmuje port, lub poprzednia instancja serwera nie zamknęła się poprawnie.
 - **Rozwiązanie:** Zabij proces używający tego portu, zresetuj komputer lub w pliku `mcp_server.py` (linia na samym dole) oraz `.env` zmień port na inny wolny.
+
+---
+
+![Podgląd UI](docs/images/error.png)
+
+### Błąd z powyższego zrzutu ekranu przy ładowaniu modelu w LM Studio
+
+- **Rozwiązanie:** Wyłączenie i włączenie LM Studio, zmniejszenie kontekstu dla ładowanego modelu, wybór innego modelu, zmiana w ustawieniach: Runtime > Runtime Selections > GGUF i zmiana silnika na inny z listy
