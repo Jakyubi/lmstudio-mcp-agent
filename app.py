@@ -216,7 +216,7 @@ def handle_pending_action(approved: bool):
             if is_error:
                 result_text = f"[TOOL ERROR]: {result_text}"
         except Exception as e:
-            result_text = f"Tool Execution Error: {e}"
+            result_text = f"[TOOL ERROR]: {e}"
     else:
         result_text = "Operation cancelled by the user. Do not attempt this exact action again; propose an alternative or ask the user."
 
@@ -235,38 +235,10 @@ def handle_pending_action(approved: bool):
 
 def is_tool_critical(tool_name: str) -> bool:
     for tool in mcp_client.tools:
-        if tool.name == tool_name:
-            ann = getattr(tool, "annotations", None)
-            if not ann:
-                return True
-
-            if hasattr(ann, "model_dump"):
-                data = ann.model_dump()
-            elif isinstance(ann, dict):
-                data = ann
-            else:
-                data = {
-                    "readOnlyHint": getattr(
-                        ann,
-                        "readOnlyHint",
-                        getattr(ann, "read_only_hint", None),
-                    ),
-                    "destructiveHint": getattr(
-                        ann,
-                        "destructiveHint",
-                        getattr(ann, "destructive_hint", None),
-                    ),
-                }
-
-            read_only = data.get("readOnlyHint", data.get("read_only_hint"))
-            destructive = data.get("destructiveHint", data.get("destructive_hint"))
-
-            if read_only is True:
+        if tool.name == tool_name and tool.annotations:
+            if tool.annotations.readOnlyHint is True:
                 return False
-
-            if destructive is True or read_only is False:
-                return True
-
+            return True
     return True
 
 
@@ -410,6 +382,7 @@ with st.sidebar:
         st.success("Logs cleared.")
 
     if st.button("Reconnect MCP Server"):
+        mcp_client.close()
         st.cache_resource.clear()
         st.session_state.history = []
         st.rerun()

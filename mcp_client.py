@@ -17,40 +17,52 @@ class MCPClient:
         self.sse_url = sse_url
         self.loop = asyncio.new_event_loop()
         self.session: ClientSession | None = None
-        self._sse_ctx = None
-        self._session_ctx = None
         self.tools: list[Tool] = []
         self.prompts: list[Any] = []
+
+        self._ready = threading.Event()
+        self._startup_error: Exception | None = None
 
         self._thread = threading.Thread(target=self._run_loop, daemon=True)
         self._thread.start()
 
         logger.info(f"Connecting MCP client to {sse_url}...")
-        future = asyncio.run_coroutine_threadsafe(self._connect(), self.loop)
-        future.result(timeout=15.0)
+        if not self._ready.wait(timeout=15.0):
+            raise TimeoutError("Timed out while connecting to MCP server.")
+        if self._startup_error:
+            raise self._startup_error
         logger.info("MCP Client initialized successfully.")
 
     def _run_loop(self):
         asyncio.set_event_loop(self.loop)
-        self.loop.run_forever()
+        self.loop.run_until_complete(self._session_worker())
 
-    async def _connect(self):
-        """Establishing an SSE connection and one-time MCP protocol negotiation."""
-        self._sse_ctx = sse_client(self.sse_url)
-        read_stream, write_stream = await self._sse_ctx.__aenter__()
+    async def _session_worker(self):
+        """Establishing an SSE connection and keeping the MCP session alive."""
+        self._close_event = asyncio.Event()
+        try:
+            async with sse_client(self.sse_url) as (read_stream, write_stream):
+                async with ClientSession(read_stream, write_stream) as session:
+                    self.session = session
+                    await self.session.initialize()
 
-        self._session_ctx = ClientSession(read_stream, write_stream)
-        self.session = await self._session_ctx.__aenter__()
+                    tools_response = await self.session.list_tools()
+                    self.tools = tools_response.tools
+                    logger.info(f"Loaded {len(self.tools)} tool(s) from MCP server.")
 
-        await self.session.initialize()
+                    prompts_response = await self.session.list_prompts()
+                    self.prompts = prompts_response.prompts
+                    logger.info(
+                        f"Loaded {len(self.prompts)} prompt(s) from MCP server."
+                    )
 
-        tools_response = await self.session.list_tools()
-        self.tools = tools_response.tools
-        logger.info(f"Loaded {len(self.tools)} tool(s) from MCP server.")
+                    self._ready.set()
 
-        prompts_response = await self.session.list_prompts()
-        self.prompts = prompts_response.prompts
-        logger.info(f"Loaded {len(self.prompts)} prompt(s) from MCP server.")
+                    await self._close_event.wait()
+
+        except Exception as e:
+            self._startup_error = e
+            self._ready.set()
 
     def call_tool(self, name: str, arguments: dict[str, Any]) -> tuple[str, bool]:
         """Thread-safe, synchronous tool invocation for Streamlit."""
@@ -68,18 +80,6 @@ class MCPClient:
         future = asyncio.run_coroutine_threadsafe(_call(), self.loop)
         return future.result(timeout=60.0)
 
-    def list_prompts(self) -> list[Any]:
-        """Fetches the list of available Prompt templates from MCP server."""
-        if not self.session:
-            return []
-
-        async def _list():
-            res = await self.session.list_prompts()
-            return res.prompts
-
-        future = asyncio.run_coroutine_threadsafe(_list(), self.loop)
-        return future.result(timeout=10.0)
-
     def get_prompt(self, name: str, arguments: dict[str, Any] | None = None) -> str:
         """Fetches prompt content from the server."""
         if not self.session:
@@ -87,19 +87,9 @@ class MCPClient:
 
         async def _get():
             res = await self.session.get_prompt(name, arguments or {})
-            texts = []
-            for msg in res.messages:
-                content = msg.content
-                if isinstance(content, str):
-                    texts.append(content)
-                elif hasattr(content, "text"):
-                    texts.append(content.text)
-                elif isinstance(content, list):
-                    for block in content:
-                        if hasattr(block, "text"):
-                            texts.append(block.text)
-                        elif isinstance(block, dict) and "text" in block:
-                            texts.append(block["text"])
+            texts = [
+                msg.content.text for msg in res.messages if hasattr(msg.content, "text")
+            ]
             return "\n\n".join(texts).strip()
 
         future = asyncio.run_coroutine_threadsafe(_get(), self.loop)
@@ -107,14 +97,5 @@ class MCPClient:
 
     def close(self):
         """Proper closure of the transport and event loop."""
-
-        async def _shutdown():
-            if self._session_ctx:
-                await self._session_ctx.__aexit__(None, None, None)
-            if self._sse_ctx:
-                await self._sse_ctx.__aexit__(None, None, None)
-
-        if self.loop.is_running():
-            future = asyncio.run_coroutine_threadsafe(_shutdown(), self.loop)
-            future.result(timeout=5.0)
-            self.loop.call_soon_threadsafe(self.loop.stop)
+        if self.loop.is_running() and hasattr(self, "_close_event"):
+            self.loop.call_soon_threadsafe(self._close_event.set)

@@ -1,6 +1,4 @@
 import logging
-import os
-import shlex
 from pathlib import Path
 
 STATE_FILE = Path(".workspace")
@@ -93,11 +91,7 @@ class WorkspaceManager:
             if not raw_files or raw_files == ".":
                 sanitized["files_to_add"] = "."
             else:
-                try:
-                    targets = shlex.split(raw_files, posix=(os.name != "nt"))
-                    targets = [t.strip("\"'") for t in targets if t.strip()]
-                except ValueError:
-                    targets = raw_files.split()
+                targets = raw_files.split()
 
                 cleaned_targets = []
                 for target in targets:

@@ -1,6 +1,5 @@
 import logging
 import os
-import shlex
 import shutil
 import subprocess
 from datetime import datetime
@@ -37,9 +36,7 @@ def list_directory(path: str = ".", max_depth: int = 2):
             return
 
         try:
-            items = sorted(
-                folder.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())
-            )
+            items = sorted(folder.iterdir(), key=lambda p: p.name.lower())
             files = [item for item in items if not item.is_dir()]
             dirs = [item for item in items if item.is_dir()]
 
@@ -274,14 +271,7 @@ def git_commit(repo_path: str, message: str, files_to_add: str = "."):
 
     try:
         raw_files = files_to_add.strip() if files_to_add else "."
-        if raw_files == ".":
-            targets = ["."]
-        else:
-            try:
-                targets = shlex.split(raw_files, posix=(os.name != "nt"))
-                targets = [t.strip("\"'") for t in targets if t.strip()]
-            except ValueError:
-                targets = raw_files.split()
+        targets = ["."] if raw_files == "." else raw_files.split()
 
         for t in targets:
             if t.startswith("-"):
