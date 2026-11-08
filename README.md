@@ -32,7 +32,7 @@
 ### D. LM Studio
 
 - Instalacja ze strony [lmstudio.ai/download](https://lmstudio.ai/download).
-- Upewnij się że instalujemy LM Studio, nie LM Studio Bionic.
+- Upewnij się że instalujesz LM Studio, nie LM Studio Bionic.
 
 ---
 
@@ -79,8 +79,10 @@
 - W zakładce `Model Search` (2) Wyszukaj i pobierz model wspierający wywoływanie narzędzi (Tool Calling), np. `Qwen 3.5 9B`, `Qwen 3 14B` lub `gpt-oss-20b`.
 - Przejdź do zakładki **Developer** (1).
 - Upewnij się, że port to `1234`.
-- Przyciskiem `Load Model` (4) wybieramy odpowiedni model.
-- Uruchamiamy serwer (3).
+- Przyciskiem `Load Model` (4) wybierz odpowiedni model.
+- Uruchom serwer (3).
+
+_UI może się nieznacznie różnić w zależności od wersji LM Studio_
 
 ---
 
@@ -143,19 +145,19 @@ _(Przeglądarka otworzy się automatycznie pod adresem `http://localhost:8501`).
 ### Aplikacja rzuca błąd `API Connection Error: Cannot connect to LLM`
 
 - **Przyczyna:** Streamlit nie może połączyć się z serwerem LM Studio.
-- **Rozwiązanie:** Sprawdź, czy w LM Studio w zakładce _Local Server_ kliknąłeś "Start Server" i czy działa on na porcie `1234`.
+- **Rozwiązanie:** Sprawdź, czy w LM Studio w zakładce _Local Server_ kliknąłeś "Start Server" i czy działa on na porcie `1234` oraz czy model jest załadowany.
 
 ### Błąd `gh command not found` lub `GitHub Repo Creation Failed`
 
 - **Przyczyna:** Brak narzędzia GitHub CLI lub brak autoryzacji.
-- **Rozwiązanie:** Otwórz zwykły terminal systemowy, upewnij się, że masz zainstalowane `gh`, a następnie wpisz `gh auth login` i zaloguj się na swoje konto GitHub.
+- **Rozwiązanie:** Otwórz terminal systemowy, upewnij się, że masz zainstalowane `gh`, a następnie wpisz `gh auth login` i zaloguj się na swoje konto GitHub.
 
-### Agent zwraca kod w tagach XML (np. `<tool_call>`) zamiast użyć narzędzia
+### Model nie skończył wszystkich zadań i wysłał pustą odpowiedź
 
-- **Przyczyna:** Mniejsze, lokalne modele czasem zapominają właściwego formatu wywoływania funkcji (JSON) i halucynują dziwny format tekstowy. Aplikacja zatrzyma się, podając puste okno odpowiedzi.
-- **Rozwiązanie:** Wyślij na czacie wiadomość: _"Your last tool call was formatted incorrectly. Please use the standard JSON tool calling format."_ (Często wystarczy zmienić model w LM Studio na nieco większy/inteligentniejszy, dedykowany do programowania, np. Qwen Coder).
+- **Najczęstsza przyczyna:** Mniejsze, lokalne modele czasem zapominają właściwego formatu wywoływania funkcji (JSON) i halucynują dziwny format tekstowy. Aplikacja zatrzyma się, podając puste okno odpowiedzi.
+- **Rozwiązanie:** Wyślij na czacie wiadomość: _"Continue."_ (Model często wznowi pracę w miejscu w którym przerwał. Można też zmienić model w LM Studio na nieco większy).
 
-### Zmiany w plikach nie chcą się skomitować (błąd Gita)
+### Zmiany w plikach nie chcą się commitować (błąd Git)
 
 - **Przyczyna:** Narzędzie `git_commit` wymaga, aby Git wiedział, kim jesteś.
 - **Rozwiązanie:** Jeśli to świeża instalacja Gita, w terminalu wpisz:
